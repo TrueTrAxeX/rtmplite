@@ -1,4 +1,4 @@
-package org.rtmplite.main;
+package org.rtmplite.utils;
 
 import javax.xml.bind.DatatypeConverter;
 

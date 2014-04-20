@@ -1,5 +1,6 @@
 package org.rtmplite.main;
 
+import java.io.File;
 import java.io.InputStream;
 import java.math.BigInteger;
 import java.net.Socket;
@@ -21,6 +22,8 @@ import javax.crypto.spec.DHParameterSpec;
 import javax.crypto.spec.DHPublicKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 
+import org.rtmplite.utils.FileUtil;
+import org.rtmplite.utils.Hex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,7 +31,7 @@ public class Handshake {
 
 	private static final Logger log = LoggerFactory.getLogger(Handshake.class);
 	
-	protected static final byte[] GENUINE_FMS_KEY = {
+	private static final byte[] GENUINE_FMS_KEY = {
 		(byte) 0x47, (byte) 0x65, (byte) 0x6e, (byte) 0x75, (byte) 0x69, (byte) 0x6e, (byte) 0x65, (byte) 0x20,
 		(byte) 0x41, (byte) 0x64, (byte) 0x6f, (byte) 0x62, (byte) 0x65, (byte) 0x20, (byte) 0x46, (byte) 0x6c,
 		(byte) 0x61, (byte) 0x73, (byte) 0x68, (byte) 0x20, (byte) 0x4d, (byte) 0x65, (byte) 0x64, (byte) 0x69,
@@ -39,8 +42,18 @@ public class Handshake {
 		(byte) 0x6e, (byte) 0xec, (byte) 0x5d, (byte) 0x2d, (byte) 0x29, (byte) 0x80, (byte) 0x6f, (byte) 0xab,
 		(byte) 0x93, (byte) 0xb8, (byte) 0xe6, (byte) 0x36, (byte) 0xcf, (byte) 0xeb, (byte) 0x31, (byte) 0xae};
 	
+	protected static final byte[] GENUINE_FP_KEY = {
+		(byte) 0x47, (byte) 0x65, (byte) 0x6E, (byte) 0x75, (byte) 0x69, (byte) 0x6E, (byte) 0x65, (byte) 0x20,
+		(byte) 0x41, (byte) 0x64, (byte) 0x6F, (byte) 0x62, (byte) 0x65, (byte) 0x20, (byte) 0x46, (byte) 0x6C,
+		(byte) 0x61, (byte) 0x73, (byte) 0x68, (byte) 0x20, (byte) 0x50, (byte) 0x6C, (byte) 0x61, (byte) 0x79,
+		(byte) 0x65, (byte) 0x72, (byte) 0x20, (byte) 0x30, (byte) 0x30, (byte) 0x31, // Genuine Adobe Flash Player 001
+		(byte) 0xF0, (byte) 0xEE, (byte) 0xC2, (byte) 0x4A, (byte) 0x80, (byte) 0x68, (byte) 0xBE, (byte) 0xE8,
+		(byte) 0x2E, (byte) 0x00, (byte) 0xD0, (byte) 0xD1, (byte) 0x02, (byte) 0x9E, (byte) 0x7E, (byte) 0x57,
+		(byte) 0x6E, (byte) 0xEC, (byte) 0x5D, (byte) 0x2D, (byte) 0x29, (byte) 0x80, (byte) 0x6F, (byte) 0xAB,
+		(byte) 0x93, (byte) 0xB8, (byte) 0xE6, (byte) 0x36, (byte) 0xCF, (byte) 0xEB, (byte) 0x31, (byte) 0xAE};	
+	
 	/** Modulus bytes from flazr */
-	protected static final byte[] DH_MODULUS_BYTES = { (byte) 0xff, (byte) 0xff, (byte) 0xff, (byte) 0xff, (byte) 0xff,
+	private static final byte[] DH_MODULUS_BYTES = { (byte) 0xff, (byte) 0xff, (byte) 0xff, (byte) 0xff, (byte) 0xff,
 			(byte) 0xff, (byte) 0xff, (byte) 0xff, (byte) 0xc9, (byte) 0x0f, (byte) 0xda, (byte) 0xa2, (byte) 0x21,
 			(byte) 0x68, (byte) 0xc2, (byte) 0x34, (byte) 0xc4, (byte) 0xc6, (byte) 0x62, (byte) 0x8b, (byte) 0x80,
 			(byte) 0xdc, (byte) 0x1c, (byte) 0xd1, (byte) 0x29, (byte) 0x02, (byte) 0x4e, (byte) 0x08, (byte) 0x8a,
@@ -58,19 +71,19 @@ public class Handshake {
 			(byte) 0xe6, (byte) 0x53, (byte) 0x81, (byte) 0xff, (byte) 0xff, (byte) 0xff, (byte) 0xff, (byte) 0xff,
 			(byte) 0xff, (byte) 0xff, (byte) 0xff };
 
-    protected static final BigInteger DH_MODULUS = new BigInteger(1, DH_MODULUS_BYTES);
+    private static final BigInteger DH_MODULUS = new BigInteger(1, DH_MODULUS_BYTES);
 
-    protected static final BigInteger DH_BASE = BigInteger.valueOf(2); 
+    private static final BigInteger DH_BASE = BigInteger.valueOf(2); 
     
     private static final byte[] CLIENT_CONST = "Genuine Adobe Flash Player 001".getBytes();
     private static final byte[] SERVER_CONST = "Genuine Adobe Flash Media Server 001".getBytes();
     
 	private static final int HANDSHAKE_SIZE = 1536;
-	protected static final int HANDSHAKE_SIZE_SERVER = (HANDSHAKE_SIZE * 2) + 1;
+	private static final int HANDSHAKE_SIZE_SERVER = (HANDSHAKE_SIZE * 2) + 1;
 	
-	protected static final int DIGEST_LENGTH = 32;
+	private static final int DIGEST_LENGTH = 32;
 
-    protected static final int KEY_LENGTH = 128;
+	private static final int KEY_LENGTH = 128;
 	
 	private static KeyAgreement keyAgreement;
 	
@@ -88,8 +101,21 @@ public class Handshake {
 	
 	private byte[] incomingPublicKey;
 	
+	private byte[] handshakeBytes;
+	
+	private byte[] swfVerificationBytes;
+	
 	private Cipher cipherOut;
 	private Cipher cipherIn;
+	
+	private byte[] swfHash;
+	private int swfSize;
+	
+	private int handshakeType = 3;
+	
+	public void setHandshakeType(int type) {
+		handshakeType = type;
+	}
 	
 	public Handshake(Socket socket) {
 		
@@ -102,10 +128,12 @@ public class Handshake {
 			log.error("HMAC SHA256 does not exist");
 		}
 		
+		handshakeBytes = createHandshakeBytes();
+		
 		this.socket = socket;
 	}
-	
-	public byte[] createHandshakeBytes() {
+
+	private byte[] createHandshakeBytes() {
 
 		byte[] bytes = new byte[HANDSHAKE_SIZE];
 		
@@ -136,7 +164,7 @@ public class Handshake {
 	 * 
 	 * @return dh keypair
 	 */
-	protected KeyPair generateKeyPair() {
+	private KeyPair generateKeyPair() {
 		KeyPair keyPair = null;
 		DHParameterSpec keySpec = new DHParameterSpec(DH_MODULUS, DH_BASE);
 		try {
@@ -151,14 +179,20 @@ public class Handshake {
 		return keyPair;
 	}
 	
+	/**
+	 * Run handshake method
+	 * @throws Exception
+	 */
 	public void doHandshake() throws Exception {
 		
 		firstRequest();
 		
 		decodeServerResponse(receiveFirstHandshakeRawResponse());
+		
+		secondRequest();
 	}
 	
-	public boolean decodeServerResponse(byte[] response) {
+	private boolean decodeServerResponse(byte[] response) {
 		
 		// minus one for the first byte which is not included (handshake type byte)
 		byte[] handledResponse = new byte[HANDSHAKE_SIZE_SERVER - 1];
@@ -274,13 +308,66 @@ public class Handshake {
 		
 		message = new byte[HANDSHAKE_SIZE - DIGEST_LENGTH];
 		
+		pos = 0;
+		
 		for(int i=0; i<message.length; i++) {
-			message[i] = part2[i];
+			message[i] = part2[pos++];
 		}
 		
 		digest = calculateHMAC_SHA256(outgoingDigest, GENUINE_FMS_KEY);
 		
-		return false;
+		byte[] signature = calculateHMAC_SHA256(message, digest);
+		byte[] serverSignature = new byte[DIGEST_LENGTH];
+
+		for(int i=0; i<serverSignature.length; i++) {
+			serverSignature[i] = part2[pos++];
+		}
+		
+		if (Arrays.equals(signature, serverSignature)) {
+			log.info("server response part 2 validation success, is Flash Player v9 handshake");
+		} else {
+			log.warn("server response part 2 validation failed, not Flash Player v9 handshake");
+		}
+		
+		// swf verification
+		if (swfHash != null) {
+			byte[] bytesFromServer = new byte[DIGEST_LENGTH];
+			
+			pos = HANDSHAKE_SIZE - DIGEST_LENGTH;
+			
+			for(int i=0; i<bytesFromServer.length; i++) {
+				bytesFromServer[i] = part1[pos++];
+			}
+			
+			byte[] bytesFromServerHash = calculateHMAC_SHA256(swfHash, bytesFromServer);
+			// construct SWF verification pong payload
+			byte[] swfv = new byte[42];
+			swfv[0] = (byte) 0x01;
+			swfv[1] = (byte) 0x01;
+			
+			byte[] byteSwfSize = intToByteArray(swfSize);
+			
+			int startPos = 2;
+			
+			for(int i=0; i<byteSwfSize.length; i++) {
+				swfv[startPos++] = byteSwfSize[i];
+			}
+			
+			for(int i=0; i<byteSwfSize.length; i++) {
+				swfv[startPos++] = byteSwfSize[i];
+			}
+			
+			for(int i=0; i<bytesFromServerHash.length; i++) {
+				swfv[startPos++] = bytesFromServerHash[i];
+			}
+			
+			swfVerificationBytes = swfv;
+			
+			log.info("initialized swf verification response from swfSize: {} & swfHash: {} = {}",
+					new Object[] { swfSize, Hex.toHexString(swfHash), Hex.toHexString(swfVerificationBytes) });
+		}
+		
+		return true;
 	}
 	
 	/**
@@ -290,17 +377,16 @@ public class Handshake {
 
 		InputStream is = socket.getInputStream();
 		
-		int available = 0;
-		int maxAttempts = 10;
+		int maxAttempts = 100;
 		int attempts = 0;
 		
-		while((available = is.available()) <= 0) {
+		while(is.available() < 3073) {
 			if(attempts > maxAttempts) break;
-			Thread.sleep(1000);
+			Thread.sleep(50);
 			attempts++;
 		}
 		
-		byte[] buf = new byte[available];
+		byte[] buf = new byte[is.available()];
 		
 		is.read(buf);
 		
@@ -309,22 +395,69 @@ public class Handshake {
 		return buf;
 	}
 	
+	/**
+	 * Second handshake request to server
+	 */
+	private void secondRequest() throws Exception {
+		byte[] randomBytes = new byte[HANDSHAKE_SIZE];
+		random.nextBytes(randomBytes);
+		
+		byte[] digest = calculateHMAC_SHA256(incomingDigest, GENUINE_FP_KEY);
+		byte[] message = new byte[HANDSHAKE_SIZE - DIGEST_LENGTH];
+		
+		int pos = 0;
+		
+		for(int i=0; i<message.length; i++) {
+			message[i] = randomBytes[pos++];
+		}
+		
+		byte[] signature = calculateHMAC_SHA256(message, digest);
+		
+		for(int i=0; i<signature.length; i++) {
+			randomBytes[pos++] = signature[i];
+		}
+		
+		if (handshakeType == HandshakeType.ENCRYPTED) {
+			// update 'encoder / decoder state' for the RC4 keys. Both parties *pretend* as if handshake part 2 (1536 bytes) was encrypted
+			// effectively this hides / discards the first few bytes of encrypted session which is known to increase the secure-ness of RC4
+			// RC4 state is just a function of number of bytes processed so far that's why we just run 1536 arbitrary bytes through the keys below
+			byte[] dummyBytes = new byte[HANDSHAKE_SIZE];
+			cipherIn.update(dummyBytes);
+			cipherOut.update(dummyBytes);
+		}
+		
+		socket.getOutputStream().write(randomBytes);
+		socket.getOutputStream().flush();
+	}
+	
+	/**
+	 * First handshake request to server
+	 * @throws Exception Request was crashed...
+	 */
 	private void firstRequest() throws Exception {
 		
 		byte[] request = new byte[HANDSHAKE_SIZE + 1];
 		request[0] = HandshakeType.NON_ENCRYPTED;
 		
-		byte[] buffer = createHandshakeBytes();
+		byte[] buffer = new byte[HANDSHAKE_SIZE];
+		
+		int pos = 0;
+		
+		for(int i=0; i<handshakeBytes.length; i++) {
+			buffer[pos++] = handshakeBytes[i];
+		}
 		
 		// create our keypair
 		KeyPair keyPair = generateKeyPair();
 		
 		outgoingPublicKey = getPublicKey(keyPair);
 		
+		log.debug("Client public key: {}", Hex.toHexString(outgoingPublicKey));
+		
 		byte[] dhPointer = getFourBytesFrom(buffer, HANDSHAKE_SIZE - 4);
 		int dhOffset = calculateOffset(dhPointer, 632, 772);
 		
-		int pos = 0;
+		pos = 0;
 		
 		for(int i=dhOffset; i<dhOffset+outgoingPublicKey.length; i++) {
 			buffer[i] = outgoingPublicKey[pos++]; 
@@ -337,18 +470,18 @@ public class Handshake {
 		
 		byte[] message = new byte[messageLength];
 		
+		pos = 0;
+		
 		for(int i=0; i<digestOffset; i++) {
-			message[i] = buffer[i];
+			message[pos++] = buffer[i];
 		}
 		
 		int afterDigestOffset = digestOffset + DIGEST_LENGTH;
 		
-		pos = afterDigestOffset;
-		
-		for(int i=digestOffset; i<HANDSHAKE_SIZE - afterDigestOffset; i++) {
-			message[i] = buffer[pos++];
+		for(int i=afterDigestOffset; i<HANDSHAKE_SIZE; i++) {
+			message[pos++] = buffer[i];
 		}
-		
+
 		outgoingDigest = calculateHMAC_SHA256(message, CLIENT_CONST);
 		
 		pos = 0;
@@ -368,16 +501,6 @@ public class Handshake {
 		
 	}
 
-	public static byte[] hexStringToByteArray(String s) {
-	    int len = s.length();
-	    byte[] data = new byte[len / 2];
-	    for (int i = 0; i < len; i += 2) {
-	        data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4)
-	                             + Character.digit(s.charAt(i+1), 16));
-	    }
-	    return data;
-	}	
-	
 	/**
 	 * Calculates an HMAC SHA256 hash using a default key length.
 	 * 
@@ -385,7 +508,7 @@ public class Handshake {
 	 * @param key
 	 * @return hmac hashed bytes
 	 */
-	public byte[] calculateHMAC_SHA256(byte[] input, byte[] key) {
+	private byte[] calculateHMAC_SHA256(byte[] input, byte[] key) {
 		byte[] output = null;
 		try {
 			hmacSHA256.init(new SecretKeySpec(key, "HmacSHA256"));
@@ -404,7 +527,7 @@ public class Handshake {
 	 * @param length
 	 * @return hmac hashed bytes
 	 */
-	public byte[] calculateHMAC_SHA256(byte[] input, byte[] key, int length) {
+	private byte[] calculateHMAC_SHA256(byte[] input, byte[] key, int length) {
 		byte[] output = null;
 		try {
 			hmacSHA256.init(new SecretKeySpec(key, 0, length, "HmacSHA256"));
@@ -421,7 +544,7 @@ public class Handshake {
 	 * @param keyPair
 	 * @return public key
 	 */
-	protected static byte[] getPublicKey(KeyPair keyPair) {
+	private static byte[] getPublicKey(KeyPair keyPair) {
 		 DHPublicKey incomingPublicKey = (DHPublicKey) keyPair.getPublic();
 	     BigInteger	dhY = incomingPublicKey.getY();
 	     log.debug("Public key: {}", dhY);
@@ -447,7 +570,7 @@ public class Handshake {
 	 * @param agreement
 	 * @return shared secret bytes if client used a supported validation scheme
 	 */
-	protected static byte[] getSharedSecret(byte[] otherPublicKeyBytes, KeyAgreement agreement) {
+	private static byte[] getSharedSecret(byte[] otherPublicKeyBytes, KeyAgreement agreement) {
 		BigInteger otherPublicKeyInt = new BigInteger(1, otherPublicKeyBytes);
 		try {
 			KeyFactory keyFactory = KeyFactory.getInstance("DH");
@@ -480,7 +603,7 @@ public class Handshake {
 		return offset;
 	}
 
-	protected byte[] getFourBytesFrom(byte[] buf, int offset) {
+	private byte[] getFourBytesFrom(byte[] buf, int offset) {
 		
 		if(offset+4 > buf.length) {
 			throw new RuntimeException("Failed offset for input buffer...");
@@ -496,9 +619,40 @@ public class Handshake {
 		return bytes;
 	}
 	
+	public static final byte[] intToByteArray(int value) {
+	    return new byte[] {
+	            (byte)(value >>> 24),
+	            (byte)(value >>> 16),
+	            (byte)(value >>> 8),
+	            (byte)value};
+	}
+	
 	public class HandshakeType {
 		public final static int ENCRYPTED = 6;
 		public final static int NON_ENCRYPTED = 3;
 	}
 	
+	/**
+	 * Initialize SWF verification data.
+	 * 
+	 * @param swfFilePath path to the swf file or null
+	 */
+	public void initSwfVerification(String swfFilePath) {
+		log.info("Initializing swf verification for: {}", swfFilePath);
+		byte[] bytes = null;
+		if (swfFilePath != null) {
+			File localSwfFile = new File(swfFilePath);
+			if (localSwfFile.exists() && localSwfFile.canRead()) {
+				log.info("Swf file path: {}", localSwfFile.getAbsolutePath());
+				bytes = FileUtil.readAsByteArray(localSwfFile);
+			} else {
+				bytes = "Rtmplight is awesome for handling non-accessable swf file".getBytes();
+			}
+		} else {
+			bytes = new byte[42];
+		}
+		swfHash = calculateHMAC_SHA256(bytes, CLIENT_CONST, 30);
+		swfSize = bytes.length;
+		log.info("Verification - size: {}, hash: {}", swfSize, Hex.toHexString(swfHash));
+	}
 }

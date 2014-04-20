@@ -3,6 +3,8 @@ package org.rtmplite.main;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Connection {
 	
@@ -10,8 +12,16 @@ public class Connection {
 	
 	private Socket socket = new Socket();
 
-	public Connection(InetSocketAddress inetSocketAddress) {
-		this.inetAddress = inetSocketAddress;
+	public Connection(String url, int port) {
+		
+		Pattern pattern = Pattern.compile("rtmp://(.*?)(:[0-9]+)?/(.*?)[/]+?(.*?)");
+		Matcher matcher = pattern.matcher(url);
+		
+		if(matcher.find()) { 
+			this.inetAddress = new InetSocketAddress(matcher.group(1), port);
+		} else {
+			throw new RuntimeException("Error connection params...");
+		}
 	}
 	
 	/**

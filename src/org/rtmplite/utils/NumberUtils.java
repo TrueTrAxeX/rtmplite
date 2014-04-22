@@ -1,7 +1,5 @@
 package org.rtmplite.utils;
 
-import java.nio.ByteBuffer;
-
 public class NumberUtils {
 	public static int threeBytesToInt(byte b1, byte b2, byte b3) {
 		int r = (b3 & 0xFF) | ((b2 & 0xFF) << 8) | ((b1 & 0x0F) << 16);
@@ -17,13 +15,26 @@ public class NumberUtils {
 		return new byte[] { b1, b2, b3 };
 	}
 	
-	public static byte[] intToBytes(int value) {
+	public static byte[] intToReverseBytes(int value) {
 	    return new byte[] {
 	        (byte) value,
 	        (byte) (value >> 8),
 	        (byte) (value >> 16),
 	        (byte) (value >> 24)
 	    };
+	}
+	
+	public static byte[] intToBytes(int value) {
+	    return new byte[] { 
+    		(byte) (value >> 24),
+    		(byte) (value >> 16),
+    		(byte) (value >> 8),
+    		(byte) value
+	    };
+	}
+
+	public static int reverseBytesToInt(byte[] bytes) {
+		return bytes[3] << 24 | (bytes[2] & 0xFF) << 16 | (bytes[1] & 0xFF) << 8 | (bytes[0] & 0xFF);
 	}
 	
 	public static int bytesToInt(byte[] bytes) {

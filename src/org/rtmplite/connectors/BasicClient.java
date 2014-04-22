@@ -8,13 +8,14 @@ import java.util.Map.Entry;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.rtmplite.amf.AMFArray;
-import org.rtmplite.amf.AMFObject;
-import org.rtmplite.messages.Header;
+import org.rtmplite.amf.AMFArrayEncoder;
+import org.rtmplite.amf.AMFObjectEncoder;
+import org.rtmplite.messages.HeaderEncoder;
 import org.rtmplite.messages.Message;
-import org.rtmplite.messages.Header.PacketTypes;
+import org.rtmplite.messages.HeaderEncoder.PacketTypes;
+import org.rtmplite.utils.NumberUtils;
 
-public class BasicConnector {
+public class BasicClient {
 	
 	public enum ParamType {
 		Null, Number, String, Boolean
@@ -32,14 +33,14 @@ public class BasicConnector {
 	}
 	
 	private Socket socket;
-	private AMFObject amfObject;
-	private AMFArray amfArr;
-	private Header header;
+	private AMFObjectEncoder amfObject;
+	private AMFArrayEncoder amfArr;
+	private HeaderEncoder header;
 	private long transactionNumber = 1L;
 	
 	private Map<String, ConnectionParam> connectionParams = new HashMap<String, ConnectionParam>();
 	
-	public BasicConnector(Socket socket) {
+	public BasicClient(Socket socket) {
 		this.socket = socket;
 	}
 	
@@ -94,13 +95,17 @@ public class BasicConnector {
 		this.transactionNumber = number;
 	}
 	
-	public void connect(String url) throws IOException {
+	public enum Type {
+		PLAY, PUBLISH
+	}
+	
+	public void connect(String url, Type connectionType) throws IOException {
 		
-		header = new Header();
+		header = new HeaderEncoder();
 		header.setPacketType(PacketTypes.AMF_COMMAND);
 		
-		this.amfObject = new AMFObject();
-		this.amfArr = new AMFArray();
+		this.amfObject = new AMFObjectEncoder();
+		this.amfArr = new AMFArrayEncoder();
 		
 		amfObject.addString("connect");
 		amfObject.addNumber((double)transactionNumber);
@@ -132,23 +137,61 @@ public class BasicConnector {
 				e.printStackTrace();
 			}
 			
-			this.sendPlay(matcher.group(3));
+			sendBufferSize();
+			
+			if(connectionType == Type.PLAY) {
+				this.sendPlay(matcher.group(3));
+			} else if(connectionType == Type.PUBLISH) {
+				this.sendPublish(matcher.group(3));
+			}
 		}
 	}
 	
-	private void sendPlay(String name) throws IOException {
-		header = new Header();
+	private void sendBufferSize() throws IOException {
+
+		HeaderEncoder header = new HeaderEncoder();
+		header.setChannelId((byte)2);
+		header.setPacketType((byte)0x4);
+		
+		AMFObjectEncoder amfObject = new AMFObjectEncoder();
+		amfObject.addBytes(new byte[] { 0x0, 0x3, 0, 0, 0, 1, 0, 0, 15, -96 });
+		
+		Message message = new Message(header, amfObject);
+		
+		socket.getOutputStream().write(message.getRawBytes());
+		socket.getOutputStream().flush();
+	}
+	
+	private void sendPublish(String name) throws IOException {
+		
+		header = new HeaderEncoder();
 		header.setChannelId((byte)3);
 		header.setPacketType(PacketTypes.AMF_COMMAND);
 		header.setStreamId(1);
 		
-		AMFObject amfObject = new AMFObject();
-		amfObject.addString("play");
-		amfObject.addNumber(2d);
+		AMFObjectEncoder amfObject = new AMFObjectEncoder();
+		amfObject.addString("publish");
+		amfObject.addNumber(3d);
 		amfObject.addNull();
 		amfObject.addString(name);
-		amfObject.addNumber(0d);
-		amfObject.addNumber(-1000d);
+		
+		Message message = new Message(header, amfObject);
+		
+		this.socket.getOutputStream().write(message.getRawBytes());
+		this.socket.getOutputStream().flush();
+	}
+	
+	private void sendPlay(String name) throws IOException {
+		header = new HeaderEncoder();
+		header.setChannelId((byte)3);
+		header.setPacketType(PacketTypes.AMF_COMMAND);
+		header.setStreamId(1);
+		
+		AMFObjectEncoder amfObject = new AMFObjectEncoder();
+		amfObject.addString("play");
+		amfObject.addNumber(3d);
+		amfObject.addNull();
+		amfObject.addString(name);
 		
 		Message message = new Message(header, amfObject);
 		
@@ -158,10 +201,10 @@ public class BasicConnector {
 	
 	private void sendCreateStreamMessage() throws IOException {
 
-		Header header = new Header();
+		HeaderEncoder header = new HeaderEncoder();
 		header.setPacketType(PacketTypes.AMF_COMMAND);
 		
-		AMFObject createStreamAMFObject = new AMFObject();
+		AMFObjectEncoder createStreamAMFObject = new AMFObjectEncoder();
 		
 		createStreamAMFObject.addString("createStream");
 		createStreamAMFObject.addNumber(2d);
@@ -186,7 +229,7 @@ public class BasicConnector {
 		}
 	}
 	
-	public AMFObject getAmfObject() {
+	public AMFObjectEncoder getAmfObject() {
 		return amfObject;
 	}
 }

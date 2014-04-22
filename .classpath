@@ -5,5 +5,15 @@
 	<classpathentry kind="lib" path="C:/Users/blade-x/RTMPLibrary/RTMPLibrary/lib/slf4j-api-1.7.7.jar"/>
 	<classpathentry kind="lib" path="C:/Users/blade-x/RTMPLibrary/RTMPLibrary/lib/log4j-1.2.17.jar"/>
 	<classpathentry kind="lib" path="C:/Users/blade-x/RTMPLibrary/RTMPLibrary/lib/slf4j-log4j12-1.7.7.jar"/>
+	<classpathentry kind="lib" path="C:/Users/blade-x/RTMPLibrary/RTMPLibrary/lib/mina/commons-lang-2.6.jar"/>
+	<classpathentry kind="lib" path="C:/Users/blade-x/RTMPLibrary/RTMPLibrary/lib/mina/commons-logging-1.0.3.jar"/>
+	<classpathentry kind="lib" path="C:/Users/blade-x/RTMPLibrary/RTMPLibrary/lib/mina/javassist-3.7.ga.jar"/>
+	<classpathentry kind="lib" path="C:/Users/blade-x/RTMPLibrary/RTMPLibrary/lib/mina/javassist-3.11.0.GA.jar"/>
+	<classpathentry kind="lib" path="C:/Users/blade-x/RTMPLibrary/RTMPLibrary/lib/mina/jzlib-1.1.1.jar"/>
+	<classpathentry kind="lib" path="C:/Users/blade-x/RTMPLibrary/RTMPLibrary/lib/mina/ognl-3.0.5.jar"/>
+	<classpathentry kind="lib" path="C:/Users/blade-x/RTMPLibrary/RTMPLibrary/lib/mina/spring-2.5.6.SEC03.jar"/>
+	<classpathentry kind="lib" path="C:/Users/blade-x/RTMPLibrary/RTMPLibrary/lib/mina/tomcat-apr-5.5.23.jar"/>
+	<classpathentry kind="lib" path="C:/Users/blade-x/RTMPLibrary/RTMPLibrary/lib/mina/xbean-spring-3.11.1.jar"/>
+	<classpathentry kind="lib" path="C:/Users/blade-x/RTMPLibrary/RTMPLibrary/lib/mina/mina-core-2.0.7.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

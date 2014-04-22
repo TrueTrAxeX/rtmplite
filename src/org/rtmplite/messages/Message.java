@@ -1,6 +1,6 @@
 package org.rtmplite.messages;
 
-import org.rtmplite.amf.AMFObject;
+import org.rtmplite.amf.AMFObjectEncoder;
 import org.rtmplite.utils.RTMPUtils;
 
 import com.sun.corba.se.impl.ior.ByteBuffer;
@@ -8,16 +8,17 @@ import com.sun.corba.se.impl.ior.ByteBuffer;
 public class Message {
 	
 	public static final int HEADER_CONTINUE = 7;
+	public static final int HEADER_NEW = 0x0;
 	
 	private int chunkSize = 128;
 	
-	private Header header;
-	private AMFObject object;
+	private HeaderEncoder header;
+	private AMFObjectEncoder object;
 	
 	private int headerLength;
 	private int bodyLength;
 	
-	public Message(Header header, AMFObject object) {
+	public Message(HeaderEncoder header, AMFObjectEncoder object) {
 		this.header = header;
 		this.object = object;
 	}

@@ -3,6 +3,7 @@ package org.rtmplite.main;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -13,7 +14,7 @@ public class Connection {
 	private Socket socket = new Socket();
 
 	public Connection(String url, int port) {
-		
+	
 		Pattern pattern = Pattern.compile("rtmp://(.*?)(:[0-9]+)?/(.*?)[/]+?(.*?)");
 		Matcher matcher = pattern.matcher(url);
 		

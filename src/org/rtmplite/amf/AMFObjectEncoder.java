@@ -4,11 +4,11 @@ import org.rtmplite.utils.NumberUtils;
 
 import com.sun.corba.se.impl.ior.ByteBuffer;
 
-public class AMFObject {
+public class AMFObjectEncoder {
 	
 	private ByteBuffer buffer;
 	
-	public AMFObject() {
+	public AMFObjectEncoder() {
 		buffer = new ByteBuffer();
 	}
 	
@@ -29,6 +29,12 @@ public class AMFObject {
 		}
 	}
 	
+	public synchronized void addBytes(byte[] data) {
+		for(int i=0; i<data.length; i++) {
+			buffer.append(data[i]);
+		}
+	}
+	
 	public synchronized void addNumber(Double number) {
 		buffer.append(AMFDataTypes.NUMBER);
 		
@@ -39,7 +45,7 @@ public class AMFObject {
 		}
 	}
 	
-	public synchronized void addArray(AMFArray array) {
+	public synchronized void addArray(AMFArrayEncoder array) {
 		buffer.append(AMFDataTypes.OBJECT);
 		
 		byte[] arr = array.toArray();

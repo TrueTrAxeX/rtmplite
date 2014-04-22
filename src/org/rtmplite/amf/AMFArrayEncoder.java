@@ -1,12 +1,10 @@
 package org.rtmplite.amf;
 
-import java.nio.charset.Charset;
-
 import org.rtmplite.utils.NumberUtils;
 
 import com.sun.corba.se.impl.ior.ByteBuffer;
 
-public class AMFArray {
+public class AMFArrayEncoder {
 	
 	private ByteBuffer buffer = new ByteBuffer();
 	

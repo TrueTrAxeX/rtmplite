@@ -69,7 +69,7 @@ public class Launcher implements Constants {
 	}
 
 	public void playConnection() {
-		String rtmpUrl = "rtmp://178.162.192.218:1935/livepkgr/raw:live299600_23386407_13_10_22_24_4";
+		String rtmpUrl = "rtmp://178.162.192.218:1935/livepkgr/raw:live299588_23388177_14_5_7_24_4";
 		int port = 1935;
 		
 		final Connection connection = new Connection(rtmpUrl, port);
@@ -114,7 +114,7 @@ public class Launcher implements Constants {
 
 				//messagesReader.addListener(listener);
 				
-				//final SynchronizedWriter publishWriter = publishConnection.getSynchronizedWriter();
+				final SynchronizedWriter publishWriter = publishConnection.getSynchronizedWriter();
 				
 				MessageRawListener rawListener = new MessageRawListener() {
 					
@@ -123,12 +123,12 @@ public class Launcher implements Constants {
 						
 						if(dataType == 9 || dataType == 8 || dataType == 18 || dataType == 22) {
 							System.out.println("SEND DATA TYPE: " + dataType);
-							//try {
-							//	//publishWriter.write(rawBytes.array());
-							//} catch (IOException e) {
-							//	// TODO Auto-generated catch block
-							//	e.printStackTrace();
-							//}
+							try {
+								publishWriter.write(rawBytes.array());
+							} catch (IOException e) {
+								// TODO Auto-generated catch block
+								e.printStackTrace();
+							}
 						}
 						
 					}

@@ -137,7 +137,7 @@ public class BasicClient implements Constants {
 			h.setDataType(TYPE_CHUNK_SIZE);
 			h.setChannelId((byte)3);
 			try {
-				byte[] sBytes = encoder.encodeEvent(h, new ChunkSize(66000)).array();
+				byte[] sBytes = encoder.encodeEvent(h, new ChunkSize(466000)).array();
 				socket.getOutputStream().write(sBytes);
 			} catch (IOException e) {
 				// TODO Auto-generated catch block

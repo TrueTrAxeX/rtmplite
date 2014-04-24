@@ -6,9 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Semaphore;
 
 import org.apache.mina.core.buffer.IoBuffer;
 import org.rtmplite.amf.packets.ChunkSize;
@@ -22,24 +20,21 @@ import org.rtmplite.main.SynchronizedWriter;
 import org.rtmplite.messages.Constants;
 import org.rtmplite.messages.Header;
 import org.rtmplite.messages.Packet;
-import org.rtmplite.messages.RTMPDecodeState;
 import org.rtmplite.utils.BufferUtils;
-import org.rtmplite.utils.NumberUtils;
 import org.rtmplite.utils.RTMPUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class RTMPDecoder implements Constants {
+public class XRTMPDecoder implements Constants {
 	
 	private Executor executor = Executors.newSingleThreadExecutor();
 	private Executor executor2 = Executors.newSingleThreadExecutor();
 	
+	private static Logger log = LoggerFactory.getLogger(XRTMPDecoder.class);
+	
+	private final int TIMEOUT = 15000;
+	
 	private int globalChunkSize = 128;
-	
-	// protection for the decoder when using multiple threads per connection
-	public static Semaphore decoderLock = new Semaphore(1, true);
-	
-	private static Logger log = LoggerFactory.getLogger(RTMPDecoder.class);
 	
 	private Map<Integer, Header> lastHeaders = new HashMap<Integer, Header>();
 	private Map<Integer, Packet> lastPackets = new HashMap<Integer, Packet>();
@@ -47,86 +42,126 @@ public class RTMPDecoder implements Constants {
 	private List<MessageListener> listeners;
 	private List<MessageRawListener> rawListeners;
 	
-	public Map<Integer, Header> getLastHeaders() {
-		return lastHeaders;
-	}
-	
+	private InputStream inputStream;
 	private SynchronizedWriter writer;
-	private RTMPEncoder encoder;
 	
-	private RTMPDecodeState state;
+	private RTMPEncoder encoder = new RTMPEncoder();
 	
-	public RTMPDecoder(SynchronizedWriter writer, RTMPDecodeState state, List<MessageListener> listeners, List<MessageRawListener> rawListeners) {
-		this.state = state;
+	public XRTMPDecoder(InputStream inputStream, SynchronizedWriter writer, List<MessageListener> listeners, List<MessageRawListener> rawListeners) {
+		this.inputStream = inputStream;
+		this.writer = writer;
+		
 		this.listeners = listeners;
 		this.rawListeners = rawListeners;
-		this.writer = writer;
-		this.encoder = new RTMPEncoder();
 		
+		try {
+			this.process();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 	
-	public void onData(IoBuffer in, int bytesRead, InputStream inputStream) {
-		final int remaining = in.remaining();
+	public byte get() throws IOException {
+		
+		/*long timeoutPoint = System.currentTimeMillis() + TIMEOUT;
+		
+		while(inputStream.available() < 1) {
+			try {
+				Thread.sleep(10);
+				
+				if(timeoutPoint < System.currentTimeMillis()) {
+					throw new IOException("Read timeout...");
+				}
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}*/
+		
+		return (byte) inputStream.read();
+	}
 	
-		// We need at least one byte
-		if (remaining < 1) {
-			state.bufferDecoding(1);
-			return;
-		}
+	public byte[] get(int amount) throws IOException {
 		
-		final int position = in.position();
-		byte headerByte = in.get();
+		long timeoutPoint = System.currentTimeMillis() + TIMEOUT;
 		
-		int headerValue;
-		int byteCount;
-		if ((headerByte & 0x3f) == 0) {
-			// Two byte header
-			if (remaining < 2) {
-				in.position(position);
-				state.bufferDecoding(2);
-				return;
+		byte[] buffer = new byte[amount];
+		
+		while(inputStream.available() < amount) {
+			try {
+				Thread.sleep(10);
+				
+				if(timeoutPoint < System.currentTimeMillis()) {
+					throw new IOException("Read timeout...");
+				}
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			}
-			headerValue = (headerByte & 0xff) << 8 | (in.get() & 0xff);
-			byteCount = 2;
-		} else if ((headerByte & 0x3f) == 1) {
-			// Three byte header
-			if (remaining < 3) {
-				in.position(position);
-				state.bufferDecoding(3);
-				return;
+		}
+		
+		inputStream.read(buffer);
+		
+		return buffer;
+	}
+	
+	public void process() throws IOException {
+		
+		while(true) {
+			IoBuffer totalBuffer = IoBuffer.allocate(0);
+			totalBuffer.setAutoExpand(true);
+			
+			byte headerByte = get();
+			totalBuffer.put(headerByte);
+			
+			int headerValue;
+			int byteCount;
+			if ((headerByte & 0x3f) == 0) {
+				byte b1 = get();
+				totalBuffer.put(b1);
+				
+				headerValue = (headerByte & 0xff) << 8 | (b1 & 0xff);
+				byteCount = 2;
+			} else if ((headerByte & 0x3f) == 1) {
+				byte b1 = get(); byte b2 = get();
+				totalBuffer.put(b1); totalBuffer.put(b2);
+				
+				headerValue = (headerByte & 0xff) << 16 | (b1 & 0xff) << 8 | (b2 & 0xff);
+				byteCount = 3;
+			} else {
+				
+				// Single byte header
+				headerValue = headerByte & 0xff;
+				byteCount = 1;
 			}
-			headerValue = (headerByte & 0xff) << 16 | (in.get() & 0xff) << 8 | (in.get() & 0xff);
-			byteCount = 3;
-		} else {
-			// Single byte header
-			headerValue = headerByte & 0xff;
-			byteCount = 1;
-		}
-		
-		final int channelId = RTMPUtils.decodeChannelId(headerValue, byteCount);
-		
-		if (channelId < 0) {
-			throw new RuntimeException("Bad channel id: " + channelId);
-		}
-		
-		// Get the header size and length
-		byte headerSize = RTMPUtils.decodeHeaderSize(headerValue, byteCount);
-		int headerLength = RTMPUtils.getHeaderLength(headerSize);
-		
-		Header lastHeader = lastHeaders.get(channelId);
-		headerLength += byteCount - 1;
-		
-		switch (headerSize) {
+			
+			final int channelId = RTMPUtils.decodeChannelId(headerValue, byteCount);
+			
+			if (channelId < 0) {
+				throw new RuntimeException("Bad channel id: " + channelId);
+			}
+			
+			// Get the header size and length
+			byte headerSize = RTMPUtils.decodeHeaderSize(headerValue, byteCount);
+			int headerLength = RTMPUtils.getHeaderLength(headerSize);
+			
+			Header lastHeader = lastHeaders.get(channelId);
+			headerLength += byteCount - 1;
+			
+			switch (headerSize) {
 			case Constants.HEADER_NEW:
 			case Constants.HEADER_SAME_SOURCE:
 			case Constants.HEADER_TIMER_CHANGE:
 				
-				if (remaining >= headerLength) {
-					int timeValue = RTMPUtils.readUnsignedMediumInt(in);
-					if (timeValue == 0xffffff) {
-						headerLength += 4;
-					}
+				IoBuffer tempIo = IoBuffer.wrap(get(3));
+				
+				int timeValue = RTMPUtils.readUnsignedMediumInt(tempIo);
+				if (timeValue == 0xffffff) {
+					headerLength += 4;
 				}
+	
+				totalBuffer.put(tempIo.array());
 				
 				break;
 			case Constants.HEADER_CONTINUE:
@@ -136,157 +171,130 @@ public class RTMPDecoder implements Constants {
 				break;
 			default:
 				throw new RuntimeException("Unexpected header size " + headerSize + " check for error");
-		}
-		
-		if (remaining < headerLength) {
-			log.trace("Header too small (hlen: {}), buffering. remaining: {}", headerLength, remaining);
-			in.position(position);
-			state.bufferDecoding(headerLength);
-			return;
-		}
-		
-		// Move the position back to the start
-		in.position(position);
-		
-		final Header header = decodeHeader(in, lastHeader);
-		if (header == null) {
-			throw new RuntimeException("Header is null, check for error");
-		}
-		
-		//final Header oldHeader = header.clone(); 
-		
-		lastHeaders.put(channelId, header);
-		
-		// check to see if this is a new packets or continue decoding an existing one
-		Packet packet = lastPackets.get(channelId);
-		if (packet == null) {
-			packet = new Packet(header.clone());
-			lastPackets.put(channelId, packet);
-		}
-		
-		final IoBuffer buf = packet.getData();
-		final int readRemaining = header.getSize() - buf.position();
-		final int chunkSize = globalChunkSize;
-		final int readAmount = (readRemaining > chunkSize) ? chunkSize : readRemaining;
-		
-		if (in.remaining() < readAmount) {
-			log.debug("Chunk too small, buffering ({},{})", in.remaining(), readAmount);
-			// skip the position back to the start
-			in.position(position);
-			state.bufferDecoding(headerLength + readAmount);
-			
-			try {
-				while(inputStream.available() < readAmount) {
-					try {
-						Thread.sleep(10);
-					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-				}
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
 			}
 			
-			return;
-		}
+			if(totalBuffer.limit() > 1)
+				totalBuffer.put(get(headerLength-totalBuffer.limit()));
 		
-		BufferUtils.put(buf, in, readAmount);
-		
-		if (buf.position() < header.getSize()) {
-			state.continueDecoding();
-			return;
-		}
-		
-		if (buf.position() > header.getSize()) {
-			log.warn("Packet size expanded from {} to {} ({})", new Object[] { (header.getSize()), buf.position(), header });
-		}
-		
-		executor2.execute(new Runnable() {
-		
-			@Override
-			public void run() {
-				for(MessageRawListener l : rawListeners) {
-					
-					byte[] hArr = encoder.encodeHeader(header, null).array();
-					byte[] bArr = new byte[buf.limit()];
-					
-					byte[] tArr = buf.array();
-					
-					for(int i=0; i<bArr.length; i++) {
-						bArr[i] = tArr[i];
-					}
-					
-					IoBuffer ioNew = IoBuffer.allocate(hArr.length+bArr.length);
-					ioNew.put(hArr);
-					ioNew.put(bArr);
-
-					l.onMessage(ioNew, header.getDataType());
-				}
+			final Header header = decodeHeader(IoBuffer.wrap(totalBuffer.array(), 0, totalBuffer.limit()), lastHeader);
+			if (header == null) {
+				throw new RuntimeException("Header is null, check for error");
 			}
 			
-		});
-
-		
-		buf.flip();
-		
-		try {
-			final IRTMPEvent message = decodeMessage(packet.getHeader(), buf);
-			//message.setHeader(packet.getHeader());
-			// Unfortunately flash will, especially when resetting a video stream with a new key frame, sometime 
-			// send an earlier time stamp.  To avoid dropping it, we just give it the minimal increment since the 
-			// last message.  But to avoid relative time stamps being mis-computed, we don't reset the header we stored.
-			//final Header lastReadHeader = lastHeaders.get(channelId);
+			lastHeaders.put(channelId, header);
 			
-			//lastHeaders.put(channelId, packet.getHeader());
-			//packet.setMessage(message);
+			// check to see if this is a new packets or continue decoding an existing one
+			Packet packet = lastPackets.get(channelId);
+			if (packet == null) {
+				packet = new Packet(header.clone());
+				lastPackets.put(channelId, packet);
+			}
 			
-			// collapse the time stamps on the last packet so that it works right for chunk type 3 later
-			lastHeader = lastHeaders.get(channelId);
-			lastHeader.setTimerBase(header.getTimer());
+			final IoBuffer buf = packet.getData();
+			
+			final int readRemaining = header.getSize() - buf.position();
+			final int chunkSize = globalChunkSize;
+			final int readAmount = (readRemaining > chunkSize) ? chunkSize : readRemaining;
 		
-			if(message != null) {
-				switch(header.getDataType()) {
-					case TYPE_PING:
-						Ping ping = (Ping) message;
+			BufferUtils.put(buf, IoBuffer.wrap(get(readAmount)), readAmount);
+			
+			if (buf.position() < header.getSize()) {
+				//state.continueDecoding();
+				continue;
+			}
+			
+			if (buf.position() > header.getSize()) {
+				System.out.println("Packet size expanded from {} to {} ({})");
+			}
+			
+			executor2.execute(new Runnable() {
+				
+				@Override
+				public void run() {
+					for(MessageRawListener l : rawListeners) {
 						
-						if(ping.getEventType() == Ping.PING_CLIENT) {
-							try {
-								Ping pong = new Ping(Ping.PONG_SERVER);
-								pong.setTimestamp((int) (System.currentTimeMillis() & 0xffffffff));
-								
-								writer.write(encoder.encodeEvent(header, pong).array());
-							} catch (IOException e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
-							}
+						byte[] hArr = encoder.encodeHeader(header, null).array();
+						byte[] bArr = new byte[buf.limit()];
+						
+						byte[] tArr = buf.array();
+						
+						for(int i=0; i<bArr.length; i++) {
+							bArr[i] = tArr[i];
 						}
 						
-					break;
-					
-					case TYPE_CHUNK_SIZE:
-						ChunkSize chunkSIZE = (ChunkSize) message;
-						
-						globalChunkSize = chunkSIZE.getSize();
-						
-					break;
+						IoBuffer ioNew = IoBuffer.allocate(hArr.length+bArr.length);
+						ioNew.put(hArr);
+						ioNew.put(bArr);
+
+						l.onMessage(ioNew, header.getDataType());
+					}
 				}
+				
+			});
+			
+			System.out.println("ÄÅÊÎÄÈÐÎÂÀÍÎ!");
+			System.out.println("CHANNEL: " + channelId);
+			System.out.println("DATA TYPE: " + header.getDataType());
+			lastPackets.put(channelId, null);
+		
+			try {
+				final IRTMPEvent message = decodeMessage(packet.getHeader(), buf);
+				//message.setHeader(packet.getHeader());
+				// Unfortunately flash will, especially when resetting a video stream with a new key frame, sometime 
+				// send an earlier time stamp.  To avoid dropping it, we just give it the minimal increment since the 
+				// last message.  But to avoid relative time stamps being mis-computed, we don't reset the header we stored.
+				//final Header lastReadHeader = lastHeaders.get(channelId);
+				
+				//lastHeaders.put(channelId, packet.getHeader());
+				//packet.setMessage(message);
+				
+				// collapse the time stamps on the last packet so that it works right for chunk type 3 later
+				lastHeader = lastHeaders.get(channelId);
+				lastHeader.setTimerBase(header.getTimer());
+			
+				if(message != null) {
+					switch(header.getDataType()) {
+						case TYPE_PING:
+							Ping ping = (Ping) message;
+							
+							if(ping.getEventType() == Ping.PING_CLIENT) {
+								try {
+									Ping pong = new Ping(Ping.PONG_SERVER);
+									pong.setTimestamp((int) (System.currentTimeMillis() & 0xffffffff));
+									
+									writer.write(encoder.encodeEvent(header, pong).array());
+								} catch (IOException e) {
+									// TODO Auto-generated catch block
+									e.printStackTrace();
+								}
+							}
+							
+						break;
+						
+						case TYPE_CHUNK_SIZE:
+							ChunkSize chunkSIZE = (ChunkSize) message;
+							
+							globalChunkSize = chunkSIZE.getSize();
+						break;
+					}
+				}
+				
+				//System.out.println("HEADER SIZE: " + header.getSize());
+				//System.out.println("DATA TIME: " + header.getDataType());
+				//System.out.println("CHANNEL ID: " + header.getChannelId());
+				//System.out.println("TIMESTAMP: " + header.getTimer());
+			} finally {
+				lastPackets.put(channelId, null);
 			}
 			
-			//System.out.println("HEADER SIZE: " + header.getSize());
-			//System.out.println("DATA TIME: " + header.getDataType());
-			//System.out.println("CHANNEL ID: " + header.getChannelId());
-			//System.out.println("TIMESTAMP: " + header.getTimer());
-		} finally {
-			lastPackets.put(channelId, null);
 		}
-		
 	}
 	
 	IRTMPEvent message = null;
 	
 	private IRTMPEvent decodeMessage(final Header header, IoBuffer in) {
+		
+		in.rewind();
 		
 		byte dataType = header.getDataType();
 	
@@ -467,9 +475,9 @@ public class RTMPDecoder implements Constants {
 
 	/** {@inheritDoc} */
 	public static ChunkSize decodeChunkSize(IoBuffer in) {
+
 		int chunkSize = in.getInt();
 		log.debug("Decoded chunk size: {}", chunkSize);
 		return new ChunkSize(chunkSize);
 	}
-
 }

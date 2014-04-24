@@ -9,6 +9,7 @@ import java.util.List;
 import org.apache.mina.core.buffer.IoBuffer;
 import org.rtmplite.amf.AMFObjectEncoder;
 import org.rtmplite.amf.RTMPDecoder;
+import org.rtmplite.amf.XRTMPDecoder;
 import org.rtmplite.messages.HeaderEncoder;
 import org.rtmplite.messages.Message;
 import org.rtmplite.messages.RTMPDecodeState;
@@ -121,10 +122,9 @@ public class MessageReader {
 			int bytesRead;
 
 			try {
+				new XRTMPDecoder(inputStream, writer, listeners, rawListeners);
 				
-				//new TestReader(inputStream);
-				
-				//if(1 == 1) return;
+				if(1 == 1) return;
 				
 				while ((bytesRead = inputStream.read(buf)) > 0) {
 					

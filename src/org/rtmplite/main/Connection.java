@@ -33,6 +33,7 @@ public class Connection {
 	 */
 	public void connect() throws IOException {
 		socket.connect(inetAddress);
+
 		
 		try {
 			writer = new SynchronizedWriter(socket.getOutputStream());
@@ -41,6 +42,14 @@ public class Connection {
 			e.printStackTrace();
 		}
 		
+	}
+	
+	/**
+	 * Disconnect from server
+	 * @throws IOException
+	 */
+	public void disconnect() throws IOException {
+		socket.close();
 	}
 	
 	/**

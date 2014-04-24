@@ -6,12 +6,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 
 import org.apache.mina.core.buffer.IoBuffer;
 import org.rtmplite.amf.packets.ChunkSize;
+import org.rtmplite.amf.packets.Notify;
 import org.rtmplite.amf.packets.Ping;
 import org.rtmplite.amf.packets.SWFResponse;
 import org.rtmplite.amf.packets.SetBuffer;
@@ -23,8 +23,11 @@ import org.rtmplite.messages.Constants;
 import org.rtmplite.messages.Header;
 import org.rtmplite.messages.Packet;
 import org.rtmplite.messages.RTMPDecodeState;
+import org.rtmplite.red5.trash.amf.io.AMF;
+import org.rtmplite.red5.trash.amf.io.DataTypes;
+import org.rtmplite.red5.trash.amf.io.IInput;
+import org.rtmplite.red5.trash.amf.io.Input;
 import org.rtmplite.utils.BufferUtils;
-import org.rtmplite.utils.NumberUtils;
 import org.rtmplite.utils.RTMPUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -470,6 +473,101 @@ public class RTMPDecoder implements Constants {
 		int chunkSize = in.getInt();
 		log.debug("Decoded chunk size: {}", chunkSize);
 		return new ChunkSize(chunkSize);
+	}
+	
+	public enum Encoding {
+		AMF0, AMF3
+	}
+	
+	/**
+	 * Decodes stream meta data, to include onMetaData, onCuePoint, and onFI.
+	 * 
+	 * @param in
+	 * @return Notify
+	 */
+	@SuppressWarnings("unchecked")
+	public static Notify decodeStreamMetadata(IoBuffer in) {
+		Encoding encoding = Encoding.AMF0;
+		
+		IInput input = null;
+
+		// check to see if the encoding is set to AMF3. 
+		// if it is then check to see if first byte is set to AMF0
+		byte amfVersion = 0x00;
+		if (encoding == Encoding.AMF3) {
+			amfVersion = in.get();
+		}
+		
+		// reset the position back to 0
+		in.position(0);
+		
+		//make a pre-emptive copy of the incoming buffer here to prevent issues that occur fairly often
+		IoBuffer copy = in.duplicate();
+		
+		
+		if (encoding == Encoding.AMF0 || amfVersion != AMF.TYPE_AMF3_OBJECT ) {
+			input = new Input(copy);
+		}
+		//get the first datatype
+		byte dataType = input.readDataType();
+		if (dataType == DataTypes.CORE_STRING) {
+			String setData = input.readString(String.class);
+			if ("@setDataFrame".equals(setData)) {
+				// get the second datatype
+				byte dataType2 = input.readDataType();
+				log.debug("Dataframe method type: {}", dataType2);
+				String onCueOrOnMeta = input.readString(String.class);
+				// get the params datatype
+				byte object = input.readDataType();
+				log.debug("Dataframe params type: {}", object);
+				Map<Object, Object> params;
+				if (object == DataTypes.CORE_MAP) {
+					// the params are sent as a Mixed-Array. Required to support the RTMP publish provided by ffmpeg/xuggler
+					params = (Map<Object, Object>) input.readMap(null);
+				} else {
+					// read the params as a standard object
+					params = (Map<Object, Object>) input.readObject(Object.class);
+				}
+				log.debug("Dataframe: {} params: {}", onCueOrOnMeta, params.toString());
+
+				IoBuffer buf = IoBuffer.allocate(1024);
+				buf.setAutoExpand(true);
+				//Output out = new Output(buf);
+				//out.writeString(onCueOrOnMeta);
+				//out.writeMap(params);
+
+				buf.flip();
+				return new Notify(buf);
+			} else if ("onFI".equals(setData)) {
+				// the onFI request contains 2 items relative to the publishing client application
+				// sd = system date (12-07-2011)
+				// st = system time (09:11:33.387)
+				byte object = input.readDataType();
+				log.debug("onFI params type: {}", object);
+				Map<Object, Object> params;
+				if (object == DataTypes.CORE_MAP) {
+					// the params are sent as a Mixed-Array
+					params = (Map<Object, Object>) input.readMap(null);
+				} else {
+					// read the params as a standard object
+					params = (Map<Object, Object>) input.readObject(Object.class);
+				}
+				log.debug("onFI params: {}", params.toString());
+			} else {
+				log.info("Unhandled request: {}", setData);
+				if (log.isDebugEnabled()) {
+					byte object = input.readDataType();
+					log.debug("Params type: {}", object);
+					if (object == DataTypes.CORE_MAP) {
+						Map<Object, Object> params = (Map<Object, Object>) input.readMap(null);
+						log.debug("Params: {}", params.toString());
+					} else {
+						log.debug("The unknown request was did not provide a parameter map");
+					}
+				}
+			}
+		}
+		return new Notify(in.asReadOnlyBuffer());
 	}
 
 }

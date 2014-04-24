@@ -41,6 +41,7 @@ public class BasicClient implements Constants {
 	private AMFArrayEncoder amfArr;
 	private HeaderEncoder header;
 	private long transactionNumber = 1L;
+	private TranslationType translationType = TranslationType.LIVE;
 	
 	private Map<String, ConnectionParam> connectionParams = new HashMap<String, ConnectionParam>();
 	
@@ -101,6 +102,14 @@ public class BasicClient implements Constants {
 	
 	public enum Type {
 		PLAY, PUBLISH
+	}
+	
+	public enum TranslationType {
+		LIVE, RECORD 
+	}
+	
+	public void setTranslationType(TranslationType tType) {
+		this.translationType = tType;
 	}
 	
 	public void connect(String url, Type connectionType) throws IOException {
@@ -195,6 +204,12 @@ public class BasicClient implements Constants {
 		amfObject.addNull();
 		amfObject.addString(name);
 		
+		if(translationType == TranslationType.LIVE) {
+			amfObject.addString("live");
+		} else {
+			amfObject.addString("record");
+		}
+		
 		Message message = new Message(header, amfObject);
 		
 		this.socket.getOutputStream().write(message.getRawBytes());
@@ -212,6 +227,12 @@ public class BasicClient implements Constants {
 		amfObject.addNumber(3d);
 		amfObject.addNull();
 		amfObject.addString(name);
+		
+		if(translationType == TranslationType.RECORD) {
+			amfObject.addNumber(0d);
+		} else if(translationType == TranslationType.LIVE) {
+			amfObject.addNumber(-1d);
+		}
 		
 		Message message = new Message(header, amfObject);
 		

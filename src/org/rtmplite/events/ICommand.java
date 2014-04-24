@@ -1,0 +1,22 @@
+package org.rtmplite.events;
+
+import java.util.Map;
+
+import org.apache.mina.core.buffer.IoBuffer;
+
+/**
+ * Represents a "command" sent to or received from an end-point.
+ * 
+ * @author Paul Gregoire (mondain@gmail.com)
+ */
+public interface ICommand {
+
+	int getTransactionId();
+	
+	IServiceCall getCall();
+
+	Map<String, Object> getConnectionParams();
+
+	IoBuffer getData();
+
+}

@@ -32,7 +32,7 @@ public class XRTMPDecoder implements Constants {
 	
 	private static Logger log = LoggerFactory.getLogger(XRTMPDecoder.class);
 	
-	private final int TIMEOUT = 15000;
+	private final int TIMEOUT = 5000;
 	
 	private int globalChunkSize = 128;
 	
@@ -53,29 +53,22 @@ public class XRTMPDecoder implements Constants {
 		
 		this.listeners = listeners;
 		this.rawListeners = rawListeners;
-		
-		try {
-			this.process();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
 	}
 	
 	public byte get() throws IOException {
 		
-		/*long timeoutPoint = System.currentTimeMillis() + TIMEOUT;
+		//long timeoutPoint = System.currentTimeMillis() + TIMEOUT;
 		
-		while(inputStream.available() < 1) {
+		/*while(inputStream.available() < 1) {
 			try {
 				Thread.sleep(10);
 				
 				if(timeoutPoint < System.currentTimeMillis()) {
+					System.out.println("TIMEOUT!");
 					throw new IOException("Read timeout...");
 				}
 			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+				throw new IOException("Read timeout...");
 			}
 		}*/
 		
@@ -90,7 +83,7 @@ public class XRTMPDecoder implements Constants {
 		
 		while(inputStream.available() < amount) {
 			try {
-				Thread.sleep(10);
+				Thread.sleep(1);
 				
 				if(timeoutPoint < System.currentTimeMillis()) {
 					throw new IOException("Read timeout...");
@@ -176,7 +169,14 @@ public class XRTMPDecoder implements Constants {
 			if(totalBuffer.limit() > 1)
 				totalBuffer.put(get(headerLength-totalBuffer.limit()));
 		
-			final Header header = decodeHeader(IoBuffer.wrap(totalBuffer.array(), 0, totalBuffer.limit()), lastHeader);
+			IoBuffer headerBuf = IoBuffer.wrap(totalBuffer.array(), 0, totalBuffer.limit());
+			IoBuffer newHeaderBuf = null;
+			
+			if(headerSize == Constants.HEADER_NEW) {
+				newHeaderBuf = headerBuf;
+			}
+			
+			final Header header = decodeHeader(headerBuf, lastHeader);
 			if (header == null) {
 				throw new RuntimeException("Header is null, check for error");
 			}
@@ -232,9 +232,9 @@ public class XRTMPDecoder implements Constants {
 				
 			});
 			
-			System.out.println("ÄÅÊÎÄÈÐÎÂÀÍÎ!");
-			System.out.println("CHANNEL: " + channelId);
-			System.out.println("DATA TYPE: " + header.getDataType());
+			///System.out.println("ÄÅÊÎÄÈÐÎÂÀÍÎ!");
+			//System.out.println("CHANNEL: " + channelId);
+			//System.out.println("DATA TYPE: " + header.getDataType());
 			lastPackets.put(channelId, null);
 		
 			try {
@@ -257,6 +257,12 @@ public class XRTMPDecoder implements Constants {
 						case TYPE_PING:
 							Ping ping = (Ping) message;
 							
+							//Ping p = new Ping(Ping.PING_CLIENT);
+							//Header hd = new Header();
+							//hd.setDataType((byte)TYPE_PING);
+							//writer.write(encoder.encodeEvent(hd, p).array());
+							
+							System.out.println("PING TYPE: " + ping.getEventType());
 							if(ping.getEventType() == Ping.PING_CLIENT) {
 								try {
 									Ping pong = new Ping(Ping.PONG_SERVER);
@@ -279,14 +285,13 @@ public class XRTMPDecoder implements Constants {
 					}
 				}
 				
-				//System.out.println("HEADER SIZE: " + header.getSize());
-				//System.out.println("DATA TIME: " + header.getDataType());
-				//System.out.println("CHANNEL ID: " + header.getChannelId());
-				//System.out.println("TIMESTAMP: " + header.getTimer());
+				System.out.println("HEADER SIZE: " + header.getSize());
+				System.out.println("DATA TIME: " + header.getDataType());
+				System.out.println("CHANNEL ID: " + header.getChannelId());
+				System.out.println("TIMESTAMP: " + header.getTimer());
 			} finally {
 				lastPackets.put(channelId, null);
 			}
-			
 		}
 	}
 	
@@ -306,6 +311,10 @@ public class XRTMPDecoder implements Constants {
 			case TYPE_CHUNK_SIZE:
 				message = decodeChunkSize(in);
 			break;
+			
+			//case TYPE_NOTIFY:
+				
+			//break;
 		}
 		
 		if(message != null) {

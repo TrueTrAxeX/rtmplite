@@ -1,4 +1,4 @@
-package org.rtmplite.main;
+package org.rtmplite.launchers;
 
 import java.io.IOException;
 
@@ -8,6 +8,11 @@ import org.rtmplite.amf.packets.Ping;
 import org.rtmplite.connectors.BasicClient;
 import org.rtmplite.connectors.BasicClient.Type;
 import org.rtmplite.events.IRTMPEvent;
+import org.rtmplite.main.Connection;
+import org.rtmplite.main.Handshake;
+import org.rtmplite.main.MessageRawListener;
+import org.rtmplite.main.MessageReader;
+import org.rtmplite.main.SynchronizedWriter;
 import org.rtmplite.messages.Constants;
 import org.rtmplite.messages.Header;
 import org.slf4j.LoggerFactory;
@@ -57,7 +62,7 @@ public class Launcher implements Constants {
 				//messagesReader.runWorker();
 				
 				final SynchronizedWriter writer = publishConnection.getSynchronizedWriter();
-				MessageReader messagesReader = new MessageReader(publishConnection.getSocket(), writer);
+				MessageReader messagesReader = new MessageReader(publishConnection);
 				messagesReader.runWorker();
 				
 			}
@@ -69,7 +74,7 @@ public class Launcher implements Constants {
 	}
 
 	public void playConnection() {
-		String rtmpUrl = "rtmp://178.162.192.218:1935/livepkgr/raw:live299588_23388177_14_5_7_24_4";
+		String rtmpUrl = "rtmp://178.162.192.218:1935/livepkgr/raw:live299647_23392463_16_11_52_24_4";
 		int port = 1935;
 		
 		final Connection connection = new Connection(rtmpUrl, port);
@@ -101,7 +106,7 @@ public class Launcher implements Constants {
 				basicClient.connect(rtmpUrl, Type.PLAY);
 				
 				final SynchronizedWriter writer = connection.getSynchronizedWriter();
-				MessageReader messagesReader = new MessageReader(connection.getSocket(), writer);
+				MessageReader messagesReader = new MessageReader(connection);
 				messagesReader.runWorker();
 				
 				/*MessageListener listener = new MessageListener() {

@@ -24,13 +24,13 @@ public class MessageReader {
 	private List<MessageListener> listeners = new ArrayList<MessageListener>();
 	private List<MessageRawListener> rawListeners = new ArrayList<MessageRawListener>();
 	
-	private Socket socket;
+	private Connection connection;
 	private SynchronizedWriter writer;
 	private InputStream inputStream;
 	
-	public MessageReader(Socket socket, SynchronizedWriter writer) {
-		this.socket = socket;
-		this.writer = writer;
+	public MessageReader(Connection connection) {
+		this.connection = connection;
+		this.writer = connection.getSynchronizedWriter();
 	}
 	
 	public void addRawListener(MessageRawListener listener) {
@@ -48,9 +48,12 @@ public class MessageReader {
 	public boolean runWorker() {
 		
 		try {
-			this.inputStream = socket.getInputStream();
+			this.inputStream = connection.getSocket().getInputStream();
 			
-			new Reader().start();
+			Reader reader = new Reader();
+			reader.setName("Reader thread");
+			
+			reader.start();
 			
 			return true;
 		} catch(Exception e) {
@@ -63,19 +66,6 @@ public class MessageReader {
 	public class Reader extends Thread {
 		
 		private int totalBytesRead = 0;
-		
-		public void copyStream(InputStream input, java.io.OutputStream output) throws IOException
-		{
-		    byte[] buffer = new byte[128]; // Adjust if you want
-		    int bytesRead;
-		    while ((bytesRead = input.read(buffer)) != -1)
-		    {
-		    	synchronized(this) {
-			        output.write(buffer, 0, bytesRead);
-			        totalBytesRead += bytesRead;
-		    	}
-		    }
-		}
 		
 		@Override
 		public void run() {
@@ -90,41 +80,39 @@ public class MessageReader {
 								e.printStackTrace();
 							}
 							
-							synchronized(MessageReader.this) {
-								HeaderEncoder header = new HeaderEncoder();
-								header.setChannelId((byte) 2);
-								header.setPacketType((byte)0x3);
-								
-								AMFObjectEncoder amfObject = new AMFObjectEncoder();
-								amfObject.addBytes(NumberUtils.intToBytes(totalBytesRead));
-								
-								Message message = new Message(header, amfObject);
-								
-								writer.write(message.getRawBytes());
-							}
+							HeaderEncoder header = new HeaderEncoder();
+							header.setChannelId((byte) 2);
+							header.setPacketType((byte)0x3);
+							
+							AMFObjectEncoder amfObject = new AMFObjectEncoder();
+							amfObject.addBytes(NumberUtils.intToBytes(totalBytesRead));
+							
+							Message message = new Message(header, amfObject);
+							
+							writer.write(message.getRawBytes());
 						}
 						
-					} catch (IOException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
+					} catch (IOException e) {}
 				}
 			}.start();
 			
-			byte[] buf = new byte[65536]; // Adjust if you want
+			//byte[] buf = new byte[65536]; // Adjust if you want
 			
-			Logger log = LoggerFactory.getLogger(MessageReader.class);
+			//Logger log = LoggerFactory.getLogger(MessageReader.class);
 			
-			RTMPDecodeState state = new RTMPDecodeState("1");
-			RTMPDecoder rtmpDecoder = new RTMPDecoder(MessageReader.this.writer, state, listeners, rawListeners);
-			byte[] lastBuffer = null;
+			//RTMPDecodeState state = new RTMPDecodeState("1");
 			
-			int bytesRead;
+			//RTMPDecoder rtmpDecoder = new RTMPDecoder(MessageReader.this.writer, state, listeners, rawListeners);
+			//byte[] lastBuffer = null;
+			
+			//int bytesRead;
 
 			try {
-				new XRTMPDecoder(inputStream, writer, listeners, rawListeners);
+				XRTMPDecoder decoder = new XRTMPDecoder(inputStream, writer, listeners, rawListeners);
+
+				decoder.process();
 				
-				if(1 == 1) return;
+				/*if(1 == 1) return;
 				
 				while ((bytesRead = inputStream.read(buf)) > 0) {
 					
@@ -189,10 +177,14 @@ public class MessageReader {
 					}
 
 				}
-
+				 */
 			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+				
+				try {
+					connection.disconnect();
+				} catch (IOException e1) {}
+				
+				return;
 			}
 		}
 	}

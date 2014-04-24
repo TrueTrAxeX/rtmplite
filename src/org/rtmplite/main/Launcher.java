@@ -114,7 +114,7 @@ public class Launcher implements Constants {
 
 				//messagesReader.addListener(listener);
 				
-				final SynchronizedWriter publishWriter = publishConnection.getSynchronizedWriter();
+				//final SynchronizedWriter publishWriter = publishConnection.getSynchronizedWriter();
 				
 				MessageRawListener rawListener = new MessageRawListener() {
 					
@@ -123,12 +123,12 @@ public class Launcher implements Constants {
 						
 						if(dataType == 9 || dataType == 8 || dataType == 18 || dataType == 22) {
 							System.out.println("SEND DATA TYPE: " + dataType);
-							try {
-								publishWriter.write(rawBytes.array());
-							} catch (IOException e) {
-								// TODO Auto-generated catch block
-								e.printStackTrace();
-							}
+							//try {
+							//	//publishWriter.write(rawBytes.array());
+							//} catch (IOException e) {
+							//	// TODO Auto-generated catch block
+							//	e.printStackTrace();
+							//}
 						}
 						
 					}
@@ -146,14 +146,14 @@ public class Launcher implements Constants {
 
 	public Launcher() {
 
-		publishConnection();
+		//publishConnection();
 
-		try {
-			Thread.sleep(2000);
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		//try {
+		//	Thread.sleep(2000);
+		//} catch (InterruptedException e) {
+		//	// TODO Auto-generated catch block
+		//	e.printStackTrace();
+		//}
 
 		playConnection();
 		

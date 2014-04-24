@@ -124,14 +124,13 @@ public class MessageReader {
 				
 				while ((bytesRead = inputStream.read(buf)) > 0) {
 					
+					System.out.println("BYTES READ: " + bytesRead);
+					
 					totalBytesRead += bytesRead;
 
 					IoBuffer buffer = IoBuffer.allocate(bytesRead);
 					
-					for(int i=0; i<bytesRead; i++) {
-						buffer.put(buf[i]);
-					}
-					
+					buffer.put(buf, 0, bytesRead);
 					buffer.rewind();
 					
 					while(buffer.hasRemaining()) {
@@ -154,7 +153,7 @@ public class MessageReader {
 							newBuffer.rewind();
 							
 							buffer = newBuffer;
-							
+						
 							rtmpDecoder.onData(buffer, bytesRead);
 						
 							lastBuffer = null;
@@ -179,6 +178,7 @@ public class MessageReader {
 								for(int i=buffer.position(); i<buffer.limit(); i++) {
 									lastBuffer[pos++] = buffer.get(i);
 								}
+
 							}
 							break;
 						}

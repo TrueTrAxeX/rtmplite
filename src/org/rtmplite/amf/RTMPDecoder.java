@@ -1,6 +1,7 @@
 package org.rtmplite.amf;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +39,7 @@ public class RTMPDecoder implements Constants {
 	// protection for the decoder when using multiple threads per connection
 	public static Semaphore decoderLock = new Semaphore(1, true);
 	
-	private Logger log = LoggerFactory.getLogger(RTMPDecoder.class);
+	private static Logger log = LoggerFactory.getLogger(RTMPDecoder.class);
 	
 	private Map<Integer, Header> lastHeaders = new HashMap<Integer, Header>();
 	private Map<Integer, Packet> lastPackets = new HashMap<Integer, Packet>();
@@ -64,7 +65,7 @@ public class RTMPDecoder implements Constants {
 		
 	}
 	
-	public void onData(IoBuffer in, int bytesRead) {
+	public void onData(IoBuffer in, int bytesRead, InputStream inputStream) {
 		final int remaining = in.remaining();
 	
 		// We need at least one byte
@@ -174,12 +175,19 @@ public class RTMPDecoder implements Constants {
 			in.position(position);
 			state.bufferDecoding(headerLength + readAmount);
 			
-			//try {
-			//	Thread.sleep(100);
-			//} catch (InterruptedException e) {
-			//	// TODO Auto-generated catch block
-			//	e.printStackTrace();
-			//}
+			try {
+				while(inputStream.available() < readAmount) {
+					try {
+						Thread.sleep(10);
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 			
 			return;
 		}
@@ -195,10 +203,10 @@ public class RTMPDecoder implements Constants {
 			log.warn("Packet size expanded from {} to {} ({})", new Object[] { (header.getSize()), buf.position(), header });
 		}
 		
-		//executor2.execute(new Runnable() {
-		//
-		//	@Override
-		//	public void run() {
+		executor2.execute(new Runnable() {
+		
+			@Override
+			public void run() {
 				for(MessageRawListener l : rawListeners) {
 					
 					byte[] hArr = encoder.encodeHeader(header, null).array();
@@ -215,13 +223,11 @@ public class RTMPDecoder implements Constants {
 					ioNew.put(bArr);
 					System.out.println("HEADER SIZE: " + header.getSize());
 					
-					
-					
 					l.onMessage(ioNew, header.getDataType());
 				}
-		//	}
+			}
 			
-		//});
+		});
 
 		
 		buf.flip();
@@ -339,7 +345,7 @@ public class RTMPDecoder implements Constants {
 	 * @param lastHeader Previous header
 	 * @return Decoded header
 	 */
-	public Header decodeHeader(IoBuffer in, Header lastHeader) {
+	public static Header decodeHeader(IoBuffer in, Header lastHeader) {
 		if (log.isTraceEnabled()) {
 			log.trace("decodeHeader - lastHeader: {} buffer: {}", lastHeader, in);
 		}

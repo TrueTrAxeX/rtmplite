@@ -122,6 +122,10 @@ public class MessageReader {
 
 			try {
 				
+				//new TestReader(inputStream);
+				
+				//if(1 == 1) return;
+				
 				while ((bytesRead = inputStream.read(buf)) > 0) {
 					
 					System.out.println("BYTES READ: " + bytesRead);
@@ -145,7 +149,7 @@ public class MessageReader {
 						}
 						
 						if(lastBuffer == null) {
-							rtmpDecoder.onData(buffer, bytesRead);
+							rtmpDecoder.onData(buffer, bytesRead, inputStream);
 						} else {
 							IoBuffer newBuffer = IoBuffer.allocate(lastBuffer.length+buffer.remaining());
 							newBuffer.put(lastBuffer);
@@ -154,7 +158,7 @@ public class MessageReader {
 							
 							buffer = newBuffer;
 						
-							rtmpDecoder.onData(buffer, bytesRead);
+							rtmpDecoder.onData(buffer, bytesRead, inputStream);
 						
 							lastBuffer = null;
 						}
@@ -178,7 +182,7 @@ public class MessageReader {
 								for(int i=buffer.position(); i<buffer.limit(); i++) {
 									lastBuffer[pos++] = buffer.get(i);
 								}
-
+								
 							}
 							break;
 						}

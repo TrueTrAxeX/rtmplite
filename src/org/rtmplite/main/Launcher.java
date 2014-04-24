@@ -69,7 +69,7 @@ public class Launcher implements Constants {
 	}
 
 	public void playConnection() {
-		String rtmpUrl = "rtmp://178.162.192.218:1935/livepkgr/raw:live299741_23376195_9_0_5_24_4";
+		String rtmpUrl = "rtmp://178.162.192.218:1935/livepkgr/raw:live299600_23386407_13_10_22_24_4";
 		int port = 1935;
 		
 		final Connection connection = new Connection(rtmpUrl, port);
@@ -146,14 +146,14 @@ public class Launcher implements Constants {
 
 	public Launcher() {
 
-		//publishConnection();
+		publishConnection();
 
-		//try {
-		//	Thread.sleep(2000);
-		//} catch (InterruptedException e) {
-		//	// TODO Auto-generated catch block
-		//	e.printStackTrace();
-		//}
+		try {
+			Thread.sleep(2000);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
 		playConnection();
 		

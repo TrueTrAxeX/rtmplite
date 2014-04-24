@@ -10,12 +10,16 @@ import java.util.regex.Pattern;
 
 import org.rtmplite.amf.AMFArrayEncoder;
 import org.rtmplite.amf.AMFObjectEncoder;
+import org.rtmplite.amf.RTMPEncoder;
+import org.rtmplite.amf.packets.ChunkSize;
+import org.rtmplite.messages.Constants;
+import org.rtmplite.messages.Header;
 import org.rtmplite.messages.HeaderEncoder;
 import org.rtmplite.messages.Message;
 import org.rtmplite.messages.HeaderEncoder.PacketTypes;
 import org.rtmplite.utils.NumberUtils;
 
-public class BasicClient {
+public class BasicClient implements Constants {
 	
 	public enum ParamType {
 		Null, Number, String, Boolean
@@ -126,6 +130,21 @@ public class BasicClient {
 
 		sendCreateStreamMessage();
 		
+		RTMPEncoder encoder = new RTMPEncoder();
+
+		if(connectionType == Type.PUBLISH) {
+			Header h = new Header();
+			h.setDataType(TYPE_CHUNK_SIZE);
+			h.setChannelId((byte)3);
+			try {
+				byte[] sBytes = encoder.encodeEvent(h, new ChunkSize(66000)).array();
+				socket.getOutputStream().write(sBytes);
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		
 		Pattern pattern = Pattern.compile("rtmp://(.*?)/(.*)[/]+?(.*)?");
 		Matcher matcher = pattern.matcher(url);
 		
@@ -138,6 +157,7 @@ public class BasicClient {
 			}
 			
 			sendBufferSize();
+			
 			
 			if(connectionType == Type.PLAY) {
 				this.sendPlay(matcher.group(3));

@@ -1,35 +1,67 @@
 package org.rtmplite.amf;
 
-import java.nio.ByteBuffer;
+import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 
 import org.apache.mina.core.buffer.IoBuffer;
+import org.rtmplite.amf.packets.ChunkSize;
+import org.rtmplite.amf.packets.Ping;
+import org.rtmplite.amf.packets.SWFResponse;
+import org.rtmplite.amf.packets.SetBuffer;
 import org.rtmplite.events.IRTMPEvent;
+import org.rtmplite.main.MessageListener;
+import org.rtmplite.main.MessageRawListener;
+import org.rtmplite.main.SynchronizedWriter;
 import org.rtmplite.messages.Constants;
 import org.rtmplite.messages.Header;
 import org.rtmplite.messages.Packet;
 import org.rtmplite.messages.RTMPDecodeState;
 import org.rtmplite.utils.BufferUtils;
+import org.rtmplite.utils.NumberUtils;
 import org.rtmplite.utils.RTMPUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class IncomingDataParser implements Constants {
-	private int globalChunkSize = 4096;
+public class RTMPDecoder implements Constants {
+	
+	private Executor executor = Executors.newSingleThreadExecutor();
+	private Executor executor2 = Executors.newSingleThreadExecutor();
+	
+	private int globalChunkSize = 128;
+	
 	// protection for the decoder when using multiple threads per connection
 	public static Semaphore decoderLock = new Semaphore(1, true);
 	
-	private Logger log = LoggerFactory.getLogger(IncomingDataParser.class);
+	private Logger log = LoggerFactory.getLogger(RTMPDecoder.class);
 	
 	private Map<Integer, Header> lastHeaders = new HashMap<Integer, Header>();
 	private Map<Integer, Packet> lastPackets = new HashMap<Integer, Packet>();
 	
+	private List<MessageListener> listeners;
+	private List<MessageRawListener> rawListeners;
+	
+	public Map<Integer, Header> getLastHeaders() {
+		return lastHeaders;
+	}
+	
+	private SynchronizedWriter writer;
+	private RTMPEncoder encoder;
+	
 	private RTMPDecodeState state;
 	
-	public IncomingDataParser(RTMPDecodeState state) {
+	public RTMPDecoder(SynchronizedWriter writer, RTMPDecodeState state, List<MessageListener> listeners, List<MessageRawListener> rawListeners) {
 		this.state = state;
+		this.listeners = listeners;
+		this.rawListeners = rawListeners;
+		this.writer = writer;
+		this.encoder = new RTMPEncoder();
+		
 	}
 	
 	public void onData(IoBuffer in, int bytesRead) {
@@ -81,18 +113,20 @@ public class IncomingDataParser implements Constants {
 		int headerLength = RTMPUtils.getHeaderLength(headerSize);
 		
 		Header lastHeader = lastHeaders.get(channelId);
-		//headerLength += byteCount - 1;
+		headerLength += byteCount - 1;
 		
 		switch (headerSize) {
 			case Constants.HEADER_NEW:
 			case Constants.HEADER_SAME_SOURCE:
 			case Constants.HEADER_TIMER_CHANGE:
+				
 				if (remaining >= headerLength) {
 					int timeValue = RTMPUtils.readUnsignedMediumInt(in);
 					if (timeValue == 0xffffff) {
 						headerLength += 4;
 					}
 				}
+				
 				break;
 			case Constants.HEADER_CONTINUE:
 				if (lastHeader != null && lastHeader.getExtendedTimestamp() != 0) {
@@ -118,6 +152,8 @@ public class IncomingDataParser implements Constants {
 			throw new RuntimeException("Header is null, check for error");
 		}
 		
+		//final Header oldHeader = header.clone(); 
+		
 		lastHeaders.put(channelId, header);
 		
 		// check to see if this is a new packets or continue decoding an existing one
@@ -137,6 +173,14 @@ public class IncomingDataParser implements Constants {
 			// skip the position back to the start
 			in.position(position);
 			state.bufferDecoding(headerLength + readAmount);
+			
+			//try {
+			//	Thread.sleep(100);
+			//} catch (InterruptedException e) {
+			//	// TODO Auto-generated catch block
+			//	e.printStackTrace();
+			//}
+			
 			return;
 		}
 		
@@ -150,6 +194,35 @@ public class IncomingDataParser implements Constants {
 		if (buf.position() > header.getSize()) {
 			log.warn("Packet size expanded from {} to {} ({})", new Object[] { (header.getSize()), buf.position(), header });
 		}
+		
+		//executor2.execute(new Runnable() {
+		//
+		//	@Override
+		//	public void run() {
+				for(MessageRawListener l : rawListeners) {
+					
+					byte[] hArr = encoder.encodeHeader(header, null).array();
+					byte[] bArr = new byte[buf.limit()];
+					
+					byte[] tArr = buf.array();
+					
+					for(int i=0; i<bArr.length; i++) {
+						bArr[i] = tArr[i];
+					}
+					
+					IoBuffer ioNew = IoBuffer.allocate(hArr.length+bArr.length);
+					ioNew.put(hArr);
+					ioNew.put(bArr);
+					System.out.println("HEADER SIZE: " + header.getSize());
+					
+					
+					
+					l.onMessage(ioNew, header.getDataType());
+				}
+		//	}
+			
+		//});
+
 		
 		buf.flip();
 		
@@ -168,23 +241,95 @@ public class IncomingDataParser implements Constants {
 			lastHeader = lastHeaders.get(channelId);
 			lastHeader.setTimerBase(header.getTimer());
 			
-			System.out.println("HEADER SIZE: " + lastHeader.getSize());
-			System.out.println("DATA TIME: " + lastHeader.getDataType());
-			System.out.println("CHANNEL ID: " + lastHeader.getChannelId());
-			System.out.println("TIMESTAMP: " + lastHeader.getTimerBase());
+			/*if(header.getTimer() > 0 && header.getChannelId() == oldHeader.getChannelId() && header.getDataType() == oldHeader.getDataType()) {
+				long sleepTime = header.getTimer() - oldHeader.getTimer();
+				
+				try {
+					Thread.sleep(sleepTime);
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			} else {
+				try {
+					Thread.sleep(100);
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}*/
+			
+			if(message != null) {
+				switch(header.getDataType()) {
+					case TYPE_PING:
+						Ping ping = (Ping) message;
+						
+						if(ping.getEventType() == Ping.PING_CLIENT) {
+							try {
+								Ping pong = new Ping(Ping.PONG_SERVER);
+								pong.setTimestamp((int) (System.currentTimeMillis() & 0xffffffff));
+								
+								writer.write(encoder.encodeEvent(header, pong).array());
+							} catch (IOException e) {
+								// TODO Auto-generated catch block
+								e.printStackTrace();
+							}
+						}
+						
+					break;
+					
+					case TYPE_CHUNK_SIZE:
+						ChunkSize chunkSIZE = (ChunkSize) message;
+						
+						globalChunkSize = chunkSIZE.getSize();
+						
+					break;
+				}
+			}
+			
+			//System.out.println("HEADER SIZE: " + header.getSize());
+			//System.out.println("DATA TIME: " + header.getDataType());
+			//System.out.println("CHANNEL ID: " + header.getChannelId());
+			//System.out.println("TIMESTAMP: " + header.getTimer());
 		} finally {
 			lastPackets.put(channelId, null);
 		}
 		
-		System.out.println("¡¿…“ œ–Œ◊»“¿ÕŒ: " + bytesRead);
 	}
 	
-	private IRTMPEvent decodeMessage(Header header, IoBuffer in) {
+	IRTMPEvent message = null;
+	
+	private IRTMPEvent decodeMessage(final Header header, IoBuffer in) {
 		
-		IRTMPEvent message;
 		byte dataType = header.getDataType();
 	
-		return null;
+		switch (dataType) {
+			case TYPE_PING:
+				message = decodePing(in);
+			break;
+			
+			case TYPE_CHUNK_SIZE:
+				message = decodeChunkSize(in);
+			break;
+		}
+		
+		if(message != null) {
+			
+			executor.execute(new Runnable() {
+
+				@Override
+				public void run() {
+					for(MessageListener l : listeners) {
+						l.onMessage(header, message, header.getDataType());
+					}
+				}
+				
+			});
+			
+			return message;
+		} else {
+			return null;
+		}
 	}
 
 	/**
@@ -293,4 +438,51 @@ public class IncomingDataParser implements Constants {
 		log.trace("CHUNK, D, {}, {}", header, headerSize);
 		return header;
 	}
+	
+	/**
+	 * Decodes ping event.
+	 * 
+	 * @param in IoBuffer
+	 * @return Ping event
+	 */
+	public Ping decodePing(IoBuffer in) {
+		Ping ping = null;
+		if (log.isTraceEnabled()) {
+			// gets the raw data as hex without changing the data or pointer
+			String hexDump = in.getHexDump();
+			log.trace("Ping dump: {}", hexDump);
+		}
+		// control type
+		short type = in.getShort();
+		switch (type) {
+			case Ping.CLIENT_BUFFER:
+				ping = new SetBuffer(in.getInt(), in.getInt());
+			break;
+			
+			case Ping.PING_SWF_VERIFY:
+				// only contains the type (2 bytes)
+				ping = new Ping(type);
+				break;
+			case Ping.PONG_SWF_VERIFY:
+				byte[] bytes = new byte[42];
+				in.get(bytes);
+				ping = new SWFResponse(bytes);
+				break;
+			default:
+				//STREAM_BEGIN, STREAM_PLAYBUFFER_CLEAR, STREAM_DRY, RECORDED_STREAM
+				//PING_CLIENT, PONG_SERVER
+				//BUFFER_EMPTY, BUFFER_FULL
+				ping = new Ping(type, in.getInt());
+				break;
+		}
+		return ping;
+	}
+
+	/** {@inheritDoc} */
+	public ChunkSize decodeChunkSize(IoBuffer in) {
+		int chunkSize = in.getInt();
+		log.debug("Decoded chunk size: {}", chunkSize);
+		return new ChunkSize(chunkSize);
+	}
+
 }

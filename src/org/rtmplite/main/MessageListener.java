@@ -1,7 +1,8 @@
 package org.rtmplite.main;
 
-import org.apache.mina.core.buffer.IoBuffer;
+import org.rtmplite.events.IRTMPEvent;
+import org.rtmplite.messages.Header;
 
 public abstract class MessageListener {
-	public abstract void onMessage(IoBuffer buffer, int bytesRead);
+	public abstract void onMessage(Header header, IRTMPEvent event, byte type);
 }

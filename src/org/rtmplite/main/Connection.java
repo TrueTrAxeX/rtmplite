@@ -13,8 +13,10 @@ public class Connection {
 	
 	private Socket socket = new Socket();
 
-	public Connection(String url, int port) {
+	private SynchronizedWriter writer;
 	
+	public Connection(String url, int port) {
+		
 		Pattern pattern = Pattern.compile("rtmp://(.*?)(:[0-9]+)?/(.*?)[/]+?(.*?)");
 		Matcher matcher = pattern.matcher(url);
 		
@@ -31,6 +33,14 @@ public class Connection {
 	 */
 	public void connect() throws IOException {
 		socket.connect(inetAddress);
+		
+		try {
+			writer = new SynchronizedWriter(socket.getOutputStream());
+		} catch (IOException e) {
+			writer = null;
+			e.printStackTrace();
+		}
+		
 	}
 	
 	/**
@@ -39,5 +49,12 @@ public class Connection {
 	 */
 	public Socket getSocket() {
 		return socket;
+	}
+	
+	/**
+	 * Get syncronized writer
+	 */
+	public SynchronizedWriter getSynchronizedWriter() {
+		return writer;
 	}
 }

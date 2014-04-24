@@ -8,20 +8,32 @@ import java.util.List;
 
 import org.apache.mina.core.buffer.IoBuffer;
 import org.rtmplite.amf.AMFObjectEncoder;
-import org.rtmplite.amf.IncomingDataParser;
+import org.rtmplite.amf.RTMPDecoder;
 import org.rtmplite.messages.HeaderEncoder;
 import org.rtmplite.messages.Message;
+import org.rtmplite.messages.RTMPDecodeState;
 import org.rtmplite.utils.NumberUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.sun.xml.internal.fastinfoset.Encoder;
 
 public class MessageReader {
 
 	private List<MessageListener> listeners = new ArrayList<MessageListener>();
+	private List<MessageRawListener> rawListeners = new ArrayList<MessageRawListener>();
 	
 	private Socket socket;
+	private SynchronizedWriter writer;
 	private InputStream inputStream;
 	
-	public MessageReader(Socket socket) {
+	public MessageReader(Socket socket, SynchronizedWriter writer) {
 		this.socket = socket;
+		this.writer = writer;
+	}
+	
+	public void addRawListener(MessageRawListener listener) {
+		rawListeners.add(listener);
 	}
 	
 	public void addListener(MessageListener listener) {
@@ -66,70 +78,118 @@ public class MessageReader {
 		
 		@Override
 		public void run() {
-	
-				//final java.io.OutputStream os = Launcher.publishConnection.getSocket().getOutputStream();
-				
-				new Thread() {
-					public void run() {
-						try {
-							while(true) {
-								try {
-									Thread.sleep(10000);
-								} catch (InterruptedException e) {
-									// TODO Auto-generated catch block
-									e.printStackTrace();
-								}
-								
-								synchronized(MessageReader.this) {
-									HeaderEncoder header = new HeaderEncoder();
-									header.setChannelId((byte) 2);
-									header.setPacketType((byte)0x3);
-									
-									AMFObjectEncoder amfObject = new AMFObjectEncoder();
-									amfObject.addBytes(NumberUtils.intToBytes(totalBytesRead));
-									
-									Message message = new Message(header, amfObject);
-									
-									socket.getOutputStream().write(message.getRawBytes());
-									socket.getOutputStream().flush();
-								}
+			new Thread() {
+				public void run() {
+					try {
+						while(true) {
+							try {
+								Thread.sleep(20000);
+							} catch (InterruptedException e) {
+								// TODO Auto-generated catch block
+								e.printStackTrace();
 							}
 							
-						} catch (IOException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
+							synchronized(MessageReader.this) {
+								HeaderEncoder header = new HeaderEncoder();
+								header.setChannelId((byte) 2);
+								header.setPacketType((byte)0x3);
+								
+								AMFObjectEncoder amfObject = new AMFObjectEncoder();
+								amfObject.addBytes(NumberUtils.intToBytes(totalBytesRead));
+								
+								Message message = new Message(header, amfObject);
+								
+								writer.write(message.getRawBytes());
+							}
 						}
+						
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
 					}
-				}.start();
-				
-				 
-				byte[] buffer = new byte[65536]; // Adjust if you want
-				
-			    int bytesRead;
-			    
-			    try {
-			    	
-					while ((bytesRead = inputStream.read(buffer)) > 0)  {
-						 
-					     totalBytesRead += bytesRead;
-					     
-					     IoBuffer buff = IoBuffer.wrap(buffer, 0, bytesRead);
-					     
-					     for(MessageListener l : listeners) {
-					    	 l.onMessage(buff, bytesRead);
-						 }
-					     
-					     try {
-							Thread.sleep(1000);
-						} catch (InterruptedException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
-						}
-					}
-				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
 				}
+			}.start();
+			
+			byte[] buf = new byte[65536]; // Adjust if you want
+			
+			Logger log = LoggerFactory.getLogger(MessageReader.class);
+			
+			RTMPDecodeState state = new RTMPDecodeState("1");
+			RTMPDecoder rtmpDecoder = new RTMPDecoder(MessageReader.this.writer, state, listeners, rawListeners);
+			byte[] lastBuffer = null;
+			
+			int bytesRead;
+
+			try {
+				
+				while ((bytesRead = inputStream.read(buf)) > 0) {
+					
+					totalBytesRead += bytesRead;
+
+					IoBuffer buffer = IoBuffer.allocate(bytesRead);
+					
+					for(int i=0; i<bytesRead; i++) {
+						buffer.put(buf[i]);
+					}
+					
+					buffer.rewind();
+					
+					while(buffer.hasRemaining()) {
+						final int remaining = buffer.remaining();
+						
+						if (state.canStartDecoding(remaining)) {
+							log.trace("Can start decoding");
+							state.startDecoding();
+						} else {
+							log.trace("Cannot start decoding");
+							break;
+						}
+						
+						if(lastBuffer == null) {
+							rtmpDecoder.onData(buffer, bytesRead);
+						} else {
+							IoBuffer newBuffer = IoBuffer.allocate(lastBuffer.length+buffer.remaining());
+							newBuffer.put(lastBuffer);
+							newBuffer.put(buffer);
+							newBuffer.rewind();
+							
+							buffer = newBuffer;
+							
+							rtmpDecoder.onData(buffer, bytesRead);
+						
+							lastBuffer = null;
+						}
+						
+						if (state.hasDecodedObject()) {
+							log.trace("Has decoded object");
+							//if (decodedObject != null) {
+							//	result.add(decodedObject);
+							//}
+						} else if (state.canContinueDecoding()) {
+							log.trace("Can continue decoding");
+							continue;
+						} else {
+							log.trace("Cannot continue decoding");
+							if(buffer.remaining() < state.getDecoderBufferAmount()) {
+						
+								int pos = 0;
+								
+								lastBuffer = new byte[buffer.remaining()];
+								
+								for(int i=buffer.position(); i<buffer.limit(); i++) {
+									lastBuffer[pos++] = buffer.get(i);
+								}
+							}
+							break;
+						}
+					}
+
+				}
+
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 		}
 	}
 }

@@ -1,7 +1,6 @@
 package org.rtmplite.simple.restreamer;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
 import java.util.concurrent.ExecutorService;
@@ -39,12 +38,12 @@ public class Restreamer {
 
 		private int idleTimeInSecs = -1;
 		
-		public synchronized void cooldown() {
+		public void cooldown() {
 			this.idleTimeInSecs = 0;
 		}
 		
 		@Override
-		public synchronized void run() {
+		public void run() {
 			while(state == State.CONNECTED) {
 				
 				if(idleTimeoutInSecs == -1) continue;
@@ -57,6 +56,8 @@ public class Restreamer {
 				}
 				
 				this.idleTimeInSecs++;
+				
+				//System.out.println("IDLE TIMEOUT..." + this.idleTimeInSecs);
 				
 				if(idleTimeoutInSecs < idleTimeInSecs) {
 					try {
@@ -121,8 +122,11 @@ public class Restreamer {
 	private State state = State.NEW; // Restreamer state
 	
 	private List<DisconnectListener> disconnectListeners = new Vector<DisconnectListener>();
+	private List<ConnectListener> connectListeners = new Vector<ConnectListener>();
 	
 	private int reconnectAttempts = 3;
+	
+	private int currentReconnectAttempt = 0;
 	
 	private int idleTimeoutInSecs = -1;
 	
@@ -142,20 +146,46 @@ public class Restreamer {
 
 	private RestreamType restreamType = RestreamType.LIVE; // default live
 	
-	public Restreamer(String inputURL, int inputPort, String outputURL, int outputPort) {
-		this.inputURL = inputURL;
-		this.outputURL = outputURL;
+	private String publishName;
+
+	private boolean isKilled = false;
 	
-		this.inputPort = inputPort;
-		this.outputPort = outputPort;
+	public void setPublishName(String name) {
+		this.publishName = name;
 	}
 	
-	public Restreamer(String inputURL, String outputURL) {
+	public String getName() {
+		return publishName;
+	}
+	
+	public boolean isKilled() {
+		return isKilled;
+	}
+	
+	public void incrementReconnectAttempt() {
+		currentReconnectAttempt++;
+	}
+	
+	public int getCurrentReconnectAttempt() {
+		return currentReconnectAttempt;
+	}
+	
+	/**
+	 * Get restreamer current state
+	 * @return
+	 */
+	public State getState() {
+		return state;
+	}
+
+	public Restreamer(String inputURL, int inputPort, PublishInfo publishInfo, String publishName) {
 		this.inputURL = inputURL;
-		this.outputURL = outputURL;
-		
-		this.inputPort = 1935;
-		this.outputPort = 1935;
+		this.outputURL = "rtmp://"+publishInfo.getIp()+":"+publishInfo.getPort()+"/"+publishInfo.getApp()+"/"+publishName;
+	
+		this.inputPort = inputPort;
+		this.outputPort = publishInfo.getPort();
+
+		this.publishName = publishName;
 	}
 	
 	/**
@@ -182,100 +212,123 @@ public class Restreamer {
 	
 	int currentHandshakeAttempt = 0;
 	
+	private Object startSynchronizer = new Object(); // Synchronizer of start method
+	
 	/**
 	 * Start restreaming
 	 * @throws StartRestreamException 
 	 * @throws IOException 
 	 */
 	public void start() throws StartRestreamException {
-
-		try {
-			state = State.PENDING_CONNECTION; // Set state in pending
+		
+		synchronized(startSynchronizer) {
 			
-			publishConnection = new Connection(outputURL, outputPort);
+			if(state == State.CONNECTED || state == State.PENDING_CONNECTION || state == State.RECONNECTING) return;
 			
-			publishConnection.connect();
-			publishConnection.setAutoMutableChunkSize(false);
-
-			playConnection = new Connection(inputURL, inputPort);
-			playConnection.connect();
+			first = true;
+			isKilled = false;
+			currentReconnectAttempt = 0;
 			
-			boolean h1 = handshake(publishConnection);
-			boolean h2 = handshake(playConnection);
-			
-			if(!h1 || !h2) {
-				this.disconnect();
+			try {
+				state = State.PENDING_CONNECTION; // Set state in pending
 				
-				if(currentHandshakeAttempt >= MAX_HANDSHAKE_ATTEMPTS) {
-					currentHandshakeAttempt = 0;
-					throw new StartRestreamException("Handshake error...");
+				publishConnection = new Connection(outputURL, outputPort);
+				
+				publishConnection.connect();
+				publishConnection.setAutoMutableChunkSize(false);
+	
+				boolean h1 = handshake(publishConnection);
+				
+				playConnection = new Connection(inputURL, inputPort);
+				playConnection.connect();
+				
+				boolean h2 = handshake(playConnection);
+				
+				if(!h1 || !h2) {
+					this.stop();
+					
+					if(currentHandshakeAttempt >= MAX_HANDSHAKE_ATTEMPTS) {
+						currentHandshakeAttempt = 0;
+						throw new StartRestreamException("Handshake error...");
+					}
+					
+					log.warn("Handshake failed... Retrying handshake...");
+					
+					currentHandshakeAttempt++;
+					
+					try {
+						Thread.sleep(5000);
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					
+					state = State.DISCONNECTED; // Set state in pending
+					
+					start();
+					
+					return;
+					
 				}
 				
-				log.warn("Handshake failed... Retrying handshake...");
-				
-				currentHandshakeAttempt++;
-				
 				try {
-					Thread.sleep(2000);
+					Thread.sleep(1000);
 				} catch (InterruptedException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
-				start();
 				
-			}
-			
-			try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			
-			BasicClient outputBasicClient = new BasicClient(publishConnection.getSocket());
-			outputBasicClient.setTranslationType(restreamTypeToTranslationType(restreamType)); // Setting restream type
-			outputBasicClient.connect(outputURL, Type.PUBLISH);
-
-			outputMessageReader = new MessageReader(publishConnection);
-			outputMessageReader.runWorker();
-			
-			try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			
-			BasicClient inputBasicClient = new BasicClient(playConnection.getSocket());
-			inputBasicClient.setTranslationType(restreamTypeToTranslationType(restreamType)); // Setting restream type
-			inputBasicClient.connect(inputURL, Type.PLAY);
-			
-			inputMessageReader = new MessageReader(playConnection);
-			inputMessageReader.runWorker();
-			
-			state = State.CONNECTED; // Set state in sucessfull connection
-			
-			executor.execute(new MaxRestreamerWorkingHandler());
-			
-			idleTimeoutHandler = new IdleTimeoutHandler();
-			executor.execute(idleTimeoutHandler);
-			
-			new Thread() {
-				public void run() {
-					restreamProcess();
+				BasicClient outputBasicClient = new BasicClient(publishConnection.getSocket());
+				outputBasicClient.setTranslationType(restreamTypeToTranslationType(restreamType)); // Setting restream type
+				outputBasicClient.connect(outputURL, Type.PUBLISH);
+	
+				outputMessageReader = new MessageReader(publishConnection);
+				outputMessageReader.runWorker();
+				
+				try {
+					Thread.sleep(1500);
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
 				}
-			}.start();
-			
-		} catch(IOException e) {
-			try {
-				this.disconnect();
 				
-				throw new StartRestreamException("Restreamer connection error... " + e.getMessage());
-			} catch (IOException e1) {
-				throw new StartRestreamException("Restreamer connection error... " + e.getMessage());
+				BasicClient inputBasicClient = new BasicClient(playConnection.getSocket());
+				inputBasicClient.setTranslationType(restreamTypeToTranslationType(restreamType)); // Setting restream type
+				inputBasicClient.connect(inputURL, Type.PLAY);
+				
+				inputMessageReader = new MessageReader(playConnection);
+				inputMessageReader.runWorker();
+				
+				state = State.CONNECTED; // Set state in sucessfull connection
+				
+				executor.execute(new MaxRestreamerWorkingHandler());
+				
+				idleTimeoutHandler = new IdleTimeoutHandler();
+				executor.execute(idleTimeoutHandler);
+				
+				new Thread() {
+					public void run() {
+						restreamProcess();
+					}
+				}.start();
+				
+				for(ConnectListener l : connectListeners) {
+					l.onConnect(this);
+				}
+				
+			} catch(IOException e) {
+				try {
+					this.disconnect();
+					
+					throw new StartRestreamException("Restreamer connection error... " + e.getMessage());
+				} catch (IOException e1) {
+					throw new StartRestreamException("Restreamer connection error... " + e.getMessage());
+				}
 			}
 		}
 	}
+	
+	private boolean first = true; 
 	
 	private void restreamProcess() {
 		inputMessageReader.addRawListener(new MessageRawListener() {
@@ -286,8 +339,7 @@ public class Restreamer {
 			@Override
 			public void onMessage(IoBuffer rawBytes, byte dataType) {
 				
-				if(dataType == Constants.TYPE_CHUNK_SIZE) {
-					
+				if(dataType == Constants.TYPE_CHUNK_SIZE && first == true) {
 					Header h = new Header();
 					h.setDataType(Constants.TYPE_CHUNK_SIZE);
 					h.setChannelId((byte)3);
@@ -299,10 +351,11 @@ public class Restreamer {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
+					
+					first = false;
 				}
 				
 				if(dataType == 9 || dataType == 8 || dataType == 22 || dataType == 18) {
-					if(idleTimeoutHandler != null) idleTimeoutHandler.cooldown();
 					
 					try {
 						if(dataType == 18) {
@@ -323,6 +376,8 @@ public class Restreamer {
 						} catch (IOException e1) {
 						}
 					}
+					
+					if(idleTimeoutHandler != null) idleTimeoutHandler.cooldown();
 				}
 			}
 		});
@@ -364,19 +419,32 @@ public class Restreamer {
 	 * @throws IOException 
 	 */
 	public void stop() throws IOException {
+		isKilled = true;
 		this.disconnect();
 	}
 	
 	/**
-	 * Count reconnect attempts after lost connection...
+	 * Set count reconnect attempts after lost connection...
 	 * @param attempts 
 	 */
-	public void setReconnectAttempts(int attempts) {
+	public void setMaxReconnectAttempts(int attempts) {
 		reconnectAttempts = attempts;
+	}
+	
+	/**
+	 * Get count reconnect attempts after lost connection...
+	 * @param listener
+	 */
+	public int getMaxReconnectAttempts() {
+		return reconnectAttempts;
 	}
 	
 	public void addDisconnectListener(DisconnectListener listener) {
 		disconnectListeners.add(listener);
+	}
+	
+	public void addConnectListener(ConnectListener listener) {
+		connectListeners.add(listener);
 	}
 	
 	private boolean handshake(Connection connection) {

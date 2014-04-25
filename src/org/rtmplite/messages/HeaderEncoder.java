@@ -55,7 +55,7 @@ public class HeaderEncoder {
 	public void setBodySize(int bodySize) {
 		this.bodySize = NumberUtils.intToThreeBytes(bodySize);
 		
-		System.out.println("LENGTH: " + NumberUtils.threeBytesToInt(this.bodySize[0], this.bodySize[1], this.bodySize[2]));
+		//System.out.println("LENGTH: " + NumberUtils.threeBytesToInt(this.bodySize[0], this.bodySize[1], this.bodySize[2]));
 	}
  	
 	/**

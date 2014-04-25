@@ -12,7 +12,7 @@ import org.rtmplite.amf.packets.ChunkSize;
 public class Connection {
 	
 	private boolean autoMutableChunkSize = true;
-	private ChunkSize chunkSize = new ChunkSize(512);
+	private ChunkSize chunkSize = new ChunkSize(4096);
 	
 	public void setChunkSize(ChunkSize chunkSize) {
 		this.chunkSize = chunkSize;
@@ -55,7 +55,6 @@ public class Connection {
 	public void connect() throws IOException {
 		socket.connect(inetAddress);
 
-		
 		try {
 			writer = new SynchronizedWriter(socket.getOutputStream());
 		} catch (IOException e) {

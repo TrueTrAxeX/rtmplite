@@ -9,5 +9,5 @@ public enum State {
 	DISCONNECTED, // Restreamer disconnected
 	PENDING_CONNECTION, // Waiting for connection...
 	NEW, // Have not run...
-	RECONNECT // Reconnect to server
+	RECONNECTING // Reconnect to server
 }

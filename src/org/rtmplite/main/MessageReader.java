@@ -69,7 +69,7 @@ public class MessageReader {
 		
 		@Override
 		public void run() {
-			/*new Thread() {
+			new Thread() {
 				public void run() {
 					try {
 						while(true) {
@@ -94,7 +94,7 @@ public class MessageReader {
 						
 					} catch (IOException e) {}
 				}
-			}.start();*/
+			}.start();
 			
 			//byte[] buf = new byte[65536]; // Adjust if you want
 			

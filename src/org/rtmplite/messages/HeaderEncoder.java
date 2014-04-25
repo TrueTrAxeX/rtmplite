@@ -19,7 +19,7 @@ public class HeaderEncoder {
 		return timestamp;
 	}
 	
-	public byte getEncodedEncryptType() {
+	public byte getChannelId() {
 		return channelId;
 	}
 	

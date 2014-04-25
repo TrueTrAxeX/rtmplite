@@ -43,7 +43,7 @@ public class SynchronizedWriter {
 		this.stream = stream;
 	}
 	
-	public void write(byte[] buffer) throws IOException {
+	public synchronized void write(byte[] buffer) throws IOException {
 		
 		//writerQueue.push(ByteBuffer.wrap(buffer));
 		stream.write(buffer);

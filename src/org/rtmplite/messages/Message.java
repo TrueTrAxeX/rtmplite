@@ -43,7 +43,7 @@ public class Message {
 			return sourceBytes;
 		} else {
 			ByteBuffer buffer = new ByteBuffer();
-			byte[] marker = RTMPUtils.getChunkMarker((byte)HEADER_CONTINUE, header.getEncodedEncryptType());
+			byte[] marker = RTMPUtils.getChunkMarker((byte)HEADER_CONTINUE, header.getChannelId());
 			
 			int pos = 0;
 			

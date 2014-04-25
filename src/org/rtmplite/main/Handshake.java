@@ -186,13 +186,11 @@ public class Handshake {
 	public void doHandshake() throws Exception {
 		
 		firstRequest();
-		
 		decodeServerResponse(receiveFirstHandshakeRawResponse());
-		
 		secondRequest();
 	}
 	
-	private boolean decodeServerResponse(byte[] response) {
+	private boolean decodeServerResponse(byte[] response) throws Exception {
 		
 		// minus one for the first byte which is not included (handshake type byte)
 		byte[] handledResponse = new byte[HANDSHAKE_SIZE_SERVER - 1];
@@ -377,12 +375,12 @@ public class Handshake {
 
 		InputStream is = socket.getInputStream();
 		
-		int maxAttempts = 100;
+		int maxAttempts = 5000;
 		int attempts = 0;
 		
 		while(is.available() < 3073) {
 			if(attempts > maxAttempts) break;
-			Thread.sleep(50);
+			Thread.sleep(1);
 			attempts++;
 		}
 		
@@ -498,7 +496,6 @@ public class Handshake {
 		
 		socket.getOutputStream().write(request);
 		socket.getOutputStream().flush();
-		
 	}
 
 	/**

@@ -7,8 +7,29 @@ import java.net.SocketException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.rtmplite.amf.packets.ChunkSize;
+
 public class Connection {
 	
+	private boolean autoMutableChunkSize = true;
+	private ChunkSize chunkSize = new ChunkSize(512);
+	
+	public void setChunkSize(ChunkSize chunkSize) {
+		this.chunkSize = chunkSize;
+	}
+	
+	public ChunkSize getChunkSize() {
+		return chunkSize;
+	}
+	
+	public void setAutoMutableChunkSize(boolean flag) {
+		this.autoMutableChunkSize = flag;
+	}
+	
+	public boolean isAutoMutableChunkSize() {
+		return autoMutableChunkSize;
+	}
+
 	private InetSocketAddress inetAddress;
 	
 	private Socket socket = new Socket();

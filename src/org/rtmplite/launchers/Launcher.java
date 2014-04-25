@@ -15,6 +15,7 @@ import org.rtmplite.main.MessageReader;
 import org.rtmplite.main.SynchronizedWriter;
 import org.rtmplite.messages.Constants;
 import org.rtmplite.messages.Header;
+import org.rtmplite.utils.Converter;
 import org.slf4j.LoggerFactory;
 
 /**
@@ -127,8 +128,20 @@ public class Launcher implements Constants {
 					public void onMessage(IoBuffer rawBytes, byte dataType) {
 						
 						if(dataType == 9 || dataType == 8 || dataType == 18 || dataType == 22) {
-							System.out.println("SEND DATA TYPE: " + dataType);
 							try {
+								if(dataType == 18) {
+									byte[] data = Converter.onMetaDataToSetDataFrame(rawBytes);
+									
+									if(data != null) {
+										publishWriter.write(data);
+										return;
+									}
+								}
+								
+								rawBytes.rewind();
+								
+								System.out.println("SEND DATA TYPE: " + dataType);
+							
 								publishWriter.write(rawBytes.array());
 							} catch (IOException e) {
 								// TODO Auto-generated catch block

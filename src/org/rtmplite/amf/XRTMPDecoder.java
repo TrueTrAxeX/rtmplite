@@ -14,6 +14,7 @@ import org.rtmplite.amf.packets.Ping;
 import org.rtmplite.amf.packets.SWFResponse;
 import org.rtmplite.amf.packets.SetBuffer;
 import org.rtmplite.events.IRTMPEvent;
+import org.rtmplite.main.Connection;
 import org.rtmplite.main.MessageListener;
 import org.rtmplite.main.MessageRawListener;
 import org.rtmplite.main.SynchronizedWriter;
@@ -21,6 +22,7 @@ import org.rtmplite.messages.Constants;
 import org.rtmplite.messages.Header;
 import org.rtmplite.messages.Packet;
 import org.rtmplite.utils.BufferUtils;
+import org.rtmplite.utils.ChunksUtils;
 import org.rtmplite.utils.RTMPUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,9 +35,7 @@ public class XRTMPDecoder implements Constants {
 	private static Logger log = LoggerFactory.getLogger(XRTMPDecoder.class);
 	
 	private final int TIMEOUT = 5000;
-	
-	private int globalChunkSize = 128;
-	
+
 	private Map<Integer, Header> lastHeaders = new HashMap<Integer, Header>();
 	private Map<Integer, Packet> lastPackets = new HashMap<Integer, Packet>();
 	
@@ -47,12 +47,15 @@ public class XRTMPDecoder implements Constants {
 	
 	private RTMPEncoder encoder = new RTMPEncoder();
 	
-	public XRTMPDecoder(InputStream inputStream, SynchronizedWriter writer, List<MessageListener> listeners, List<MessageRawListener> rawListeners) {
+	private Connection connection;
+	
+	public XRTMPDecoder(Connection connection, InputStream inputStream, SynchronizedWriter writer, List<MessageListener> listeners, List<MessageRawListener> rawListeners) {
 		this.inputStream = inputStream;
 		this.writer = writer;
 		
 		this.listeners = listeners;
 		this.rawListeners = rawListeners;
+		this.connection = connection;
 	}
 	
 	public byte get() throws IOException {
@@ -97,6 +100,29 @@ public class XRTMPDecoder implements Constants {
 		inputStream.read(buffer);
 		
 		return buffer;
+	}
+	
+	private IoBuffer createRawPacketData(int chunkSize, Header header, IoBuffer buf, int channelId) {
+		Header cHeader = header.clone();
+		
+		//if(numChunks > 0) {
+		//	cHeader.setSize(cHeader.getSize()+numChunks-1);
+		//}
+		
+		byte[] hArr = encoder.encodeHeader(cHeader, null).array();
+		byte[] bArr = ChunksUtils.splitOnChunks(chunkSize, buf, (byte) channelId);
+	
+		//byte[] tArr = buf.array();
+		
+		//for(int i=0; i<bArr.length; i++) {
+		//	bArr[i] = tArr[i];
+		//}
+		
+		IoBuffer ioNew = IoBuffer.allocate(hArr.length+bArr.length);
+		ioNew.put(hArr);
+		ioNew.put(bArr);
+		
+		return ioNew;
 	}
 	
 	public void process() throws IOException {
@@ -170,12 +196,7 @@ public class XRTMPDecoder implements Constants {
 				totalBuffer.put(get(headerLength-totalBuffer.limit()));
 		
 			IoBuffer headerBuf = IoBuffer.wrap(totalBuffer.array(), 0, totalBuffer.limit());
-			IoBuffer newHeaderBuf = null;
-			
-			if(headerSize == Constants.HEADER_NEW) {
-				newHeaderBuf = headerBuf;
-			}
-			
+		
 			final Header header = decodeHeader(headerBuf, lastHeader);
 			if (header == null) {
 				throw new RuntimeException("Header is null, check for error");
@@ -193,7 +214,7 @@ public class XRTMPDecoder implements Constants {
 			final IoBuffer buf = packet.getData();
 			
 			final int readRemaining = header.getSize() - buf.position();
-			final int chunkSize = globalChunkSize;
+			final int chunkSize = connection.getChunkSize().getSize();
 			final int readAmount = (readRemaining > chunkSize) ? chunkSize : readRemaining;
 		
 			BufferUtils.put(buf, IoBuffer.wrap(get(readAmount)), readAmount);
@@ -207,26 +228,14 @@ public class XRTMPDecoder implements Constants {
 				System.out.println("Packet size expanded from {} to {} ({})");
 			}
 			
+			final IoBuffer rawPacketData = createRawPacketData(4096, header.clone(), buf, channelId);
+			
 			executor2.execute(new Runnable() {
 				
 				@Override
 				public void run() {
 					for(MessageRawListener l : rawListeners) {
-						
-						byte[] hArr = encoder.encodeHeader(header, null).array();
-						byte[] bArr = new byte[buf.limit()];
-						
-						byte[] tArr = buf.array();
-						
-						for(int i=0; i<bArr.length; i++) {
-							bArr[i] = tArr[i];
-						}
-						
-						IoBuffer ioNew = IoBuffer.allocate(hArr.length+bArr.length);
-						ioNew.put(hArr);
-						ioNew.put(bArr);
-
-						l.onMessage(ioNew, header.getDataType());
+						l.onMessage(rawPacketData, header.getDataType());
 					}
 				}
 				
@@ -280,15 +289,17 @@ public class XRTMPDecoder implements Constants {
 						case TYPE_CHUNK_SIZE:
 							ChunkSize chunkSIZE = (ChunkSize) message;
 							
-							globalChunkSize = chunkSIZE.getSize();
+							if(connection.isAutoMutableChunkSize()) {
+								connection.setChunkSize(chunkSIZE);
+							}
 						break;
 					}
 				}
 				
-				System.out.println("HEADER SIZE: " + header.getSize());
-				System.out.println("DATA TIME: " + header.getDataType());
-				System.out.println("CHANNEL ID: " + header.getChannelId());
-				System.out.println("TIMESTAMP: " + header.getTimer());
+				//System.out.println("HEADER SIZE: " + header.getSize());
+				//System.out.println("DATA TIME: " + header.getDataType());
+				//System.out.println("CHANNEL ID: " + header.getChannelId());
+				//System.out.println("TIMESTAMP: " + header.getTimer());
 			} finally {
 				lastPackets.put(channelId, null);
 			}

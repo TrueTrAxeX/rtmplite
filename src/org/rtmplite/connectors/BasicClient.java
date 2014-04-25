@@ -138,22 +138,7 @@ public class BasicClient implements Constants {
 		socket.getOutputStream().flush();
 
 		sendCreateStreamMessage();
-		
-		RTMPEncoder encoder = new RTMPEncoder();
 
-		if(connectionType == Type.PUBLISH) {
-			Header h = new Header();
-			h.setDataType(TYPE_CHUNK_SIZE);
-			h.setChannelId((byte)3);
-			try {
-				byte[] sBytes = encoder.encodeEvent(h, new ChunkSize(466000)).array();
-				socket.getOutputStream().write(sBytes);
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-		}
-		
 		Pattern pattern = Pattern.compile("rtmp://(.*?)/(.*)[/]+?(.*)?");
 		Matcher matcher = pattern.matcher(url);
 		

@@ -375,12 +375,12 @@ public class Handshake {
 
 		InputStream is = socket.getInputStream();
 		
-		int maxAttempts = 5000;
+		int maxAttempts = 20;
 		int attempts = 0;
 		
 		while(is.available() < 3073) {
 			if(attempts > maxAttempts) break;
-			Thread.sleep(1);
+			Thread.sleep(50);
 			attempts++;
 		}
 		

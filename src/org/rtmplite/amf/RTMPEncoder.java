@@ -11,6 +11,7 @@ import org.rtmplite.amf.packets.SetBuffer;
 import org.rtmplite.events.IRTMPEvent;
 import org.rtmplite.messages.Constants;
 import org.rtmplite.messages.Header;
+import org.rtmplite.utils.BufferUtils;
 import org.rtmplite.utils.RTMPUtils;
 
 public class RTMPEncoder implements Constants {
@@ -94,8 +95,13 @@ public class RTMPEncoder implements Constants {
 	 * @return            Encoded header data
 	 */
 	public IoBuffer encodeHeader(final Header header, final Header lastHeader) {
-		final IoBuffer result = IoBuffer.allocate(calculateHeaderSize(header, lastHeader));
+		IoBuffer result = IoBuffer.allocate(calculateHeaderSize(header, lastHeader));
+		
 		encodeHeader(header, lastHeader, result);
+		
+		if(result.limit() != result.capacity())
+			result = IoBuffer.wrap(BufferUtils.consumeBytes(result.array(), result.limit()));
+		
 		return result;
 	}
 	
@@ -140,7 +146,10 @@ public class RTMPEncoder implements Constants {
 	 * @param lastHeader  Previous header
 	 * @param buf         Buffer to write encoded header to
 	 */
-	public void encodeHeader(final Header header, final Header lastHeader, final IoBuffer buf) {
+	public void encodeHeader(final Header header, final Header lastHeader, IoBuffer buf) {
+		
+		buf.setAutoExpand(true);
+		
 		final byte headerType = getHeaderType(header, lastHeader);
 		RTMPUtils.encodeHeaderByte(buf, headerType, header.getChannelId());
 		final int timer;
@@ -205,6 +214,7 @@ public class RTMPEncoder implements Constants {
 			default:
 				break;
 		}
+		
 		//log.trace("CHUNK, E, {}, {}", header, headerType);
 	}
 	
@@ -232,8 +242,13 @@ public class RTMPEncoder implements Constants {
 		IoBuffer eh = this.encodeHeader(header, lastHeader);
 		
 		IoBuffer completeData = IoBuffer.allocate(eh.limit()+encodedBody.limit());
+		completeData.setAutoExpand(true);
+		
 		completeData.put(eh.array());
 		completeData.put(encodedBody.array());
+		
+		if(completeData.limit() != completeData.capacity())
+			completeData = IoBuffer.wrap(BufferUtils.consumeBytes(completeData.array(), completeData.limit()));
 		
 		return completeData;
 	}

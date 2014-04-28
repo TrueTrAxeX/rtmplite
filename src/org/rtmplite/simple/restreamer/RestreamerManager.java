@@ -4,20 +4,24 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class RestreamerManager {
 	
 	public class DisconnectedRestereamersCleaner implements Runnable {
 		
-		private static final int interval = 7200 * 1000; // 2 hours (default)
+		private static final int interval = 4460000; // 2 hours (default)
 
 		@Override
 		public void run() {
 			while(disconnectedRestreamersCleanerWorking) {
 				
-				for(Restreamer r : storage) {
+				for(int i=0; i<storage.size(); i++) {
+					
+					Restreamer r = storage.get(i);
+					
 					if(r.getState() == State.DISCONNECTED) {
-						storage.remove(r);
+						storage.remove(i);
 					}
 				}
 				
@@ -131,14 +135,27 @@ public class RestreamerManager {
 		return instance;
 	}
 	
-	private List<Restreamer> storage = new Vector<Restreamer>();
+	private static final List<Restreamer> storage = new CopyOnWriteArrayList<Restreamer>();
 	
 	/**
 	 * Add new restreamer for manager
 	 * @param restreamer
 	 */
 	public void add(Restreamer restreamer) {
-		this.storage.add(restreamer);
+		
+		/*for(Restreamer rs : storage) {
+			if(rs.equals(restreamer)) {
+				try {
+					rs.disconnect();
+					storage.remove(rs);
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		}*/
+		
+		storage.add(restreamer);
 	}
 	
 	/**
@@ -163,18 +180,48 @@ public class RestreamerManager {
 	}
 	
 	/**
+	 * Get all restreamers
+	 * @return
+	 */
+	public List<Restreamer> getAll() {
+		return storage;
+	}
+	
+	/**
 	 * Kill restreamer by name
 	 * @throws IOException 
 	 */
-	public boolean kill(String name) throws IOException {
-		for(Restreamer r : storage) {
+	public Restreamer killByName(String name) throws IOException {
+		for(int i=0; i<storage.size(); i++) {
+			
+			Restreamer r = storage.get(i);
+			
 			if(r.getName().equals(name)) {
 				r.stop();
-				storage.remove(r);
-				return true;
+				storage.remove(i);
+				return r;
 			}
 		}
 		
-		return false;
+		return null;
+	}
+	
+	/**
+	 * Kill restreamer by unique id
+	 * @throws IOException 
+	 */
+	public Restreamer killByUniqueId(Long uniqueId) throws IOException {
+		for(int i=0; i<storage.size(); i++) {
+			
+			Restreamer r = storage.get(i);
+			
+			if(r.getUniqueId() == uniqueId) {
+				r.stop();
+				storage.remove(i);
+				return r;
+			}
+		}
+		
+		return null;
 	}
 }

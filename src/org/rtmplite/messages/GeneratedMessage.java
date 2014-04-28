@@ -13,11 +13,11 @@ import org.slf4j.LoggerFactory;
 /**
  * RTMP packet. Consists of packet header, data and event context.
  */
-public class Packet implements Externalizable {
+public class GeneratedMessage implements Externalizable {
 
 	private static final long serialVersionUID = -6415050845346626950L;
 	
-	private static Logger log = LoggerFactory.getLogger(Packet.class);
+	private static Logger log = LoggerFactory.getLogger(GeneratedMessage.class);
 	
 	private static final boolean noCopy = System.getProperty("packet.noCopy") == null ? false : Boolean.valueOf(System.getProperty("packet.noCopy"));
 
@@ -36,7 +36,7 @@ public class Packet implements Externalizable {
 	 */
 	private IoBuffer data;
 
-	public Packet() {
+	public GeneratedMessage() {
 		log.trace("ctor");
 	}
 
@@ -44,7 +44,7 @@ public class Packet implements Externalizable {
 	 * Create packet with given header
 	 * @param header       Packet header
 	 */
-	public Packet(Header header) {
+	public GeneratedMessage(Header header) {
 		log.trace("Header: {}", header);
 		this.header = header;
 		data = IoBuffer.allocate(header.getSize()).setAutoExpand(true);
@@ -55,7 +55,7 @@ public class Packet implements Externalizable {
 	 * @param header     RTMP header
 	 * @param event      RTMP message
 	 */
-	public Packet(Header header, IRTMPEvent event) {
+	public GeneratedMessage(Header header, IRTMPEvent event) {
 		log.trace("Header: {} event: {}", header, event);
 		this.header = header;
 		this.message = event;

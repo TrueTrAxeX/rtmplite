@@ -8,15 +8,16 @@ import org.apache.mina.core.buffer.IoBuffer;
 public class Converter {
 	
 	public static byte[] onMetaDataToSetDataFrame(IoBuffer sourceData) {
-		sourceData.position(4);
-		
-		int packetLength = sourceData.getMediumInt();
-		
-		sourceData.position(13);
-		
-		short length = sourceData.getShort();
-		
+
 		try {
+			sourceData.position(4);
+			
+			int packetLength = sourceData.getMediumInt();
+			
+			sourceData.position(13);
+			
+			short length = sourceData.getShort();
+		
 			String name = sourceData.getString((int) length, Charset.forName("UTF-8").newDecoder());
 		
 			if(name.equals("onMetaData")) {
@@ -54,6 +55,8 @@ public class Converter {
 		} catch (CharacterCodingException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
+		} catch(Exception e) {
+			return null;
 		}
 		
 		return null;

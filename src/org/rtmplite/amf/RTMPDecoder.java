@@ -21,7 +21,7 @@ import org.rtmplite.main.MessageRawListener;
 import org.rtmplite.main.SynchronizedWriter;
 import org.rtmplite.messages.Constants;
 import org.rtmplite.messages.Header;
-import org.rtmplite.messages.Packet;
+import org.rtmplite.messages.GeneratedMessage;
 import org.rtmplite.messages.RTMPDecodeState;
 import org.rtmplite.red5.trash.amf.io.AMF;
 import org.rtmplite.red5.trash.amf.io.DataTypes;
@@ -45,7 +45,7 @@ public class RTMPDecoder implements Constants {
 	private static Logger log = LoggerFactory.getLogger(RTMPDecoder.class);
 	
 	private Map<Integer, Header> lastHeaders = new HashMap<Integer, Header>();
-	private Map<Integer, Packet> lastPackets = new HashMap<Integer, Packet>();
+	private Map<Integer, GeneratedMessage> lastPackets = new HashMap<Integer, GeneratedMessage>();
 	
 	private List<MessageListener> listeners;
 	private List<MessageRawListener> rawListeners;
@@ -161,9 +161,9 @@ public class RTMPDecoder implements Constants {
 		lastHeaders.put(channelId, header);
 		
 		// check to see if this is a new packets or continue decoding an existing one
-		Packet packet = lastPackets.get(channelId);
+		GeneratedMessage packet = lastPackets.get(channelId);
 		if (packet == null) {
-			packet = new Packet(header.clone());
+			packet = new GeneratedMessage(header.clone());
 			lastPackets.put(channelId, packet);
 		}
 		

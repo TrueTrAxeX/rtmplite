@@ -25,7 +25,7 @@ public class BasicClient implements Constants {
 		Null, Number, String, Boolean
 	}
 	
-	public class ConnectionParam {
+	public static class ConnectionParam {
 		
 		private Object param;
 		private ParamType paramType;
@@ -52,12 +52,12 @@ public class BasicClient implements Constants {
 	public void addConnectionParam(String name, ConnectionParam param) {
 		connectionParams.put(name, param);
 	}
-	
+
 	private void setDefaultParams() {
 		if(connectionParams.get("objectEncoding") == null) 
 			connectionParams.put("objectEncoding", new ConnectionParam(0d, ParamType.Number));
-		if(connectionParams.get("flashver") == null) 
-			connectionParams.put("flashver", new ConnectionParam("WIN 11,2,202,235", ParamType.String));
+		if(connectionParams.get("flashVer") == null) 
+			connectionParams.put("flashVer", new ConnectionParam("WIN 11,2,202,235", ParamType.String));
 		if(connectionParams.get("audioCodecs") == null)  
 			connectionParams.put("audioCodecs", new ConnectionParam(3575d, ParamType.Number));
 		if(connectionParams.get("videoFunction") == null)  
@@ -70,6 +70,9 @@ public class BasicClient implements Constants {
 			connectionParams.put("videoCodecs", new ConnectionParam(252d, ParamType.Number));
 		if(connectionParams.get("swfUrl") == null)  
 			connectionParams.put("swfUrl", new ConnectionParam(null, ParamType.Null));
+		if(connectionParams.get("fpad") == null) {
+			connectionParams.put("fpad", new ConnectionParam(false, ParamType.Boolean));
+		}
 	}
 	
 	private void fillAmfObject() {
@@ -152,7 +155,6 @@ public class BasicClient implements Constants {
 			
 			sendBufferSize();
 			
-			
 			if(connectionType == Type.PLAY) {
 				this.sendPlay(matcher.group(3));
 			} else if(connectionType == Type.PUBLISH) {
@@ -213,11 +215,11 @@ public class BasicClient implements Constants {
 		amfObject.addNull();
 		amfObject.addString(name);
 		
-		if(translationType == TranslationType.RECORD) {
+		/*if(translationType == TranslationType.RECORD) {
 			amfObject.addNumber(0d);
 		} else if(translationType == TranslationType.LIVE) {
 			amfObject.addNumber(-1d);
-		}
+		}*/
 		
 		Message message = new Message(header, amfObject);
 		

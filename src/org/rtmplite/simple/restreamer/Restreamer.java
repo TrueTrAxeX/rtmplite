@@ -1,7 +1,10 @@
 package org.rtmplite.simple.restreamer;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Vector;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -9,6 +12,8 @@ import java.util.concurrent.Executors;
 import org.apache.mina.core.buffer.IoBuffer;
 import org.rtmplite.amf.RTMPEncoder;
 import org.rtmplite.connectors.BasicClient;
+import org.rtmplite.connectors.BasicClient.ConnectionParam;
+import org.rtmplite.connectors.BasicClient.ParamType;
 import org.rtmplite.connectors.BasicClient.TranslationType;
 import org.rtmplite.connectors.BasicClient.Type;
 import org.rtmplite.main.Connection;
@@ -23,6 +28,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class Restreamer {
+	
+	private long uniqueId = 0;
+	
+	public void setUniqueId(long uniqueId) {
+		this.uniqueId = uniqueId;
+	}
+	
+	public long getUniqueId() {
+		return uniqueId;
+	}
 	
 	private static Logger log = LoggerFactory.getLogger(Restreamer.class);
 	
@@ -44,7 +59,7 @@ public class Restreamer {
 		
 		@Override
 		public void run() {
-			while(state == State.CONNECTED) {
+			while(state == State.CONNECTED || state == State.PENDING_CONNECTION) {
 				
 				if(idleTimeoutInSecs == -1) continue;
 				
@@ -117,18 +132,22 @@ public class Restreamer {
 		
 	}
 	
+
 	private final static int MAX_HANDSHAKE_ATTEMPTS = 3;
 	
 	private State state = State.NEW; // Restreamer state
 	
 	private List<DisconnectListener> disconnectListeners = new Vector<DisconnectListener>();
 	private List<ConnectListener> connectListeners = new Vector<ConnectListener>();
+	private List<FirstMediaPacketListener> firstMediaPacketListeners = new Vector<>();
+	
+	private boolean wasMediaPackets = false; 
 	
 	private int reconnectAttempts = 3;
 	
 	private int currentReconnectAttempt = 0;
 	
-	private int idleTimeoutInSecs = -1;
+	private int idleTimeoutInSecs = 60;
 	
 	private String inputURL; // Input url
 	private String outputURL; // Output url
@@ -170,6 +189,22 @@ public class Restreamer {
 		return currentReconnectAttempt;
 	}
 	
+	public Connection getOutputConnection() {
+		return publishConnection;
+	}
+	
+	public Connection getInputConnection() {
+		return playConnection;
+	}
+	
+	/**
+	 * If media packets being received, then return true, else false
+	 * @return
+	 */
+	public boolean wasMediaPackets() {
+		return wasMediaPackets;
+	}
+	
 	/**
 	 * Get restreamer current state
 	 * @return
@@ -186,6 +221,13 @@ public class Restreamer {
 		this.outputPort = publishInfo.getPort();
 
 		this.publishName = publishName;
+	}
+	
+	/**
+	 * Get publish url
+	 */
+	public String getPublishUrl() {
+		return this.outputURL;
 	}
 	
 	/**
@@ -228,6 +270,7 @@ public class Restreamer {
 			first = true;
 			isKilled = false;
 			currentReconnectAttempt = 0;
+			wasMediaPackets = false;
 			
 			try {
 				state = State.PENDING_CONNECTION; // Set state in pending
@@ -257,7 +300,7 @@ public class Restreamer {
 					currentHandshakeAttempt++;
 					
 					try {
-						Thread.sleep(5000);
+						Thread.sleep(2000);
 					} catch (InterruptedException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
@@ -281,7 +324,7 @@ public class Restreamer {
 				BasicClient outputBasicClient = new BasicClient(publishConnection.getSocket());
 				outputBasicClient.setTranslationType(restreamTypeToTranslationType(restreamType)); // Setting restream type
 				outputBasicClient.connect(outputURL, Type.PUBLISH);
-	
+				
 				outputMessageReader = new MessageReader(publishConnection);
 				outputMessageReader.runWorker();
 				
@@ -294,12 +337,19 @@ public class Restreamer {
 				
 				BasicClient inputBasicClient = new BasicClient(playConnection.getSocket());
 				inputBasicClient.setTranslationType(restreamTypeToTranslationType(restreamType)); // Setting restream type
+				
+				inputBasicClient.addConnectionParam("flashVer", new ConnectionParam("WIN 13,0,0,182", ParamType.String));
+				inputBasicClient.addConnectionParam("pageUrl", new ConnectionParam("http://www.bet365.com/extra/en/streaming/live-sport/", ParamType.String));
+				inputBasicClient.addConnectionParam("capabilities", new ConnectionParam("239", ParamType.String));
+
+				for(Entry<String, ConnectionParam> entry : inputConnectionParams.entrySet()) {
+					inputBasicClient.addConnectionParam(entry.getKey(), entry.getValue());
+				}
+				
 				inputBasicClient.connect(inputURL, Type.PLAY);
 				
 				inputMessageReader = new MessageReader(playConnection);
 				inputMessageReader.runWorker();
-				
-				state = State.CONNECTED; // Set state in sucessfull connection
 				
 				executor.execute(new MaxRestreamerWorkingHandler());
 				
@@ -326,6 +376,16 @@ public class Restreamer {
 				}
 			}
 		}
+	}
+	
+	private Map<String, ConnectionParam> inputConnectionParams = new HashMap<String, ConnectionParam>();
+	
+	public void addInputConnectionParam(String name, ConnectionParam param) {
+		if(param == null) {
+			inputConnectionParams.remove(name);
+			return;
+		}
+		inputConnectionParams.put(name, param);
 	}
 	
 	private boolean first = true; 
@@ -357,6 +417,16 @@ public class Restreamer {
 				
 				if(dataType == 9 || dataType == 8 || dataType == 22 || dataType == 18) {
 					
+					if(!wasMediaPackets) {
+						state = State.CONNECTED; // Set state in sucessfull connection
+						
+						for(FirstMediaPacketListener l : firstMediaPacketListeners) {
+							l.onPacket(Restreamer.this);
+						}
+						
+						wasMediaPackets = true;
+					}
+						
 					try {
 						if(dataType == 18) {
 							byte[] data = Converter.onMetaDataToSetDataFrame(rawBytes);
@@ -447,6 +517,10 @@ public class Restreamer {
 		connectListeners.add(listener);
 	}
 	
+	public void addFirstMediaPacketListener(FirstMediaPacketListener listener) {
+		firstMediaPacketListeners.add(listener);
+	}
+	
 	private boolean handshake(Connection connection) {
 		try {
 			Handshake handshake = new Handshake(connection.getSocket());
@@ -456,5 +530,31 @@ public class Restreamer {
 		} catch(Exception e) {
 			return false;
 		}
+	}
+	
+	@Override
+	public boolean equals(Object obj) {
+		
+		if(obj instanceof Restreamer) {
+			Restreamer rs = (Restreamer) obj;
+			
+			if(rs.getUniqueId() == rs.getUniqueId()) {
+				return true;
+			}
+		} else {
+			return false;
+		}
+		
+		return false;
+	}
+
+	private Object commonInfo;
+	
+	public void setCommonInfo(Object commonInfo) {
+		this.commonInfo = commonInfo;
+	}
+	
+	public Object getCommonInfo() {
+		return commonInfo;
 	}
 }

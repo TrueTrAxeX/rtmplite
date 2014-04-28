@@ -65,7 +65,7 @@ public class MessageReader {
 
 	public class Reader extends Thread {
 		
-		private int totalBytesRead = 0;
+		private int totalBytesRead = 100000;
 		
 		@Override
 		public void run() {
